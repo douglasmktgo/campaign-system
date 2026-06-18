@@ -3,6 +3,8 @@ import express, {
   type Response,
   type NextFunction,
 } from "express";
+import path from "path";
+import fs from "fs";
 import cors from "cors";
 import { AppError } from "./lib/httpError";
 import { briefsRouter } from "./routes/briefs";
@@ -30,6 +32,17 @@ export function createApp() {
   app.use("/api/production", productionRouter);
   app.use("/api/dashboard", dashboardRouter);
   app.use("/api/settings", settingsRouter);
+
+  // Servir el frontend ya compilado (despliegue de un solo servicio / una sola URL).
+  // En desarrollo no existe esta carpeta y se usa el dev server de Vite (puerto 5173).
+  const frontendDist = path.join(__dirname, "..", "..", "frontend", "dist");
+  if (fs.existsSync(path.join(frontendDist, "index.html"))) {
+    app.use(express.static(frontendDist));
+    // Fallback SPA: cualquier ruta que NO sea /api devuelve index.html.
+    app.get(/^\/(?!api\/).*/, (_req, res) => {
+      res.sendFile(path.join(frontendDist, "index.html"));
+    });
+  }
 
   // 404 for unknown API routes.
   app.use((req, res) => {

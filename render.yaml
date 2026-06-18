@@ -1,0 +1,14 @@
+# Blueprint de Render: publica todo como UN solo servicio web (una sola URL).
+# El backend Express sirve también el frontend ya compilado.
+services:
+  - type: web
+    name: campaign-system
+    runtime: node
+    plan: free
+    buildCommand: bash render-build.sh
+    startCommand: bash render-start.sh
+    envVars:
+      - key: NODE_VERSION
+        value: "20.18.0"
+      - key: DATABASE_URL
+        value: file:./dev.db
