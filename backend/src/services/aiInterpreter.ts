@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AppError } from "../lib/httpError";
+import { getSetting } from "../lib/settings";
 
 // Shape the AI must return. Mirrors the spec exactly.
 export interface InterpretedSubtask {
@@ -85,11 +86,11 @@ const TOOL = {
 };
 
 function getClient(): Anthropic {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = getSetting("anthropicApiKey");
   if (!apiKey) {
     throw new AppError(
       500,
-      "ANTHROPIC_API_KEY no está configurada en el archivo .env del backend."
+      "La API key de Anthropic no está configurada. Ponla en la pantalla de Configuración (o en .env)."
     );
   }
   return new Anthropic({ apiKey });

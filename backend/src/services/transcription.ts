@@ -1,4 +1,5 @@
 import { AppError } from "../lib/httpError";
+import { getSetting } from "../lib/settings";
 
 // Audio transcription wrapper.
 //
@@ -9,7 +10,7 @@ import { AppError } from "../lib/httpError";
 // .env and flip the check below.
 
 export function isTranscriptionConfigured(): boolean {
-  return Boolean(process.env.OPENAI_API_KEY);
+  return Boolean(getSetting("openaiApiKey"));
 }
 
 export async function transcribeAudio(
@@ -33,7 +34,7 @@ export async function transcribeAudio(
   try {
     res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
       method: "POST",
-      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+      headers: { Authorization: `Bearer ${getSetting("openaiApiKey")}` },
       body: form,
     });
   } catch (err: any) {

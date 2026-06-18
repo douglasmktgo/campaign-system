@@ -16,10 +16,12 @@ export default function BriefCapture() {
   const fileInput = useRef<HTMLInputElement>(null);
 
   const [recent, setRecent] = useState<Campaign[]>([]);
+  const [aiReady, setAiReady] = useState(true);
 
   useEffect(() => {
     api.transcriptionConfig().then((c) => setTranscriptionEnabled(c.enabled)).catch(() => {});
     api.listCampaigns().then(setRecent).catch(() => {});
+    api.getSettings().then((s) => setAiReady(s.anthropicConfigured)).catch(() => {});
   }, []);
 
   async function handleInterpret() {
@@ -74,6 +76,15 @@ export default function BriefCapture() {
       </div>
 
       {error && <Banner kind="error">{error}</Banner>}
+
+      {!aiReady && (
+        <Banner kind="warning">
+          Falta vincular la API key de Anthropic para interpretar con IA.{" "}
+          <button className="font-semibold underline" onClick={() => navigate("/settings")}>
+            Ir a Configuración
+          </button>
+        </Banner>
+      )}
 
       <Card className="space-y-4">
         <div>

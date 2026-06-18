@@ -31,12 +31,7 @@ git push -u origin main
    **Create codespace on main**.
 2. Espera 1–2 min: se monta el contenedor y corre el setup automático.
 
-### 4. Poner las API keys
-En el Codespace, abre `backend/.env` y rellena:
-- `ANTHROPIC_API_KEY` — para la interpretación con IA.
-- `CLICKUP_API_TOKEN` y `CLICKUP_SPACE_ID` — para sincronizar con ClickUp.
-
-### 5. Arrancar
+### 4. Arrancar
 Abre **dos terminales** en el Codespace (menú Terminal → Split):
 
 ```bash
@@ -50,6 +45,15 @@ cd frontend && npm run dev     # se abre el preview en el puerto 5173
 Codespaces detecta el puerto 5173 y ofrece **"Open in Browser"** (o abre el preview solo).
 El frontend habla con el backend por `/api`, que Vite redirige a `localhost:4000` dentro del
 mismo contenedor — no hay que configurar URLs.
+
+### 5. Vincular las API keys (desde la app, sin tocar archivos)
+En la app abierta, ve a **Configuración** (menú superior) y pega:
+- **Anthropic API key** — para interpretar el brief con IA.
+- **ClickUp · Personal API Token** + **Space ID** — para sincronizar.
+- (Opcional) **OpenAI API key** — para transcripción de audio.
+
+Pulsa **Guardar** y luego **Probar conexión** para verificar que las keys son válidas.
+Se guardan en `backend/config.local.json` (ignorado por git) — nunca se suben.
 
 ## Nota de seguridad
 Estás poniendo el **token de ClickUp de la empresa** y la **API key de Anthropic** en un

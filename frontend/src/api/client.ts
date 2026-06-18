@@ -78,6 +78,21 @@ export interface DashboardSummary {
   };
 }
 
+export interface SettingsStatus {
+  anthropicConfigured: boolean;
+  anthropicHint: string | null;
+  clickupTokenConfigured: boolean;
+  clickupTokenHint: string | null;
+  clickupSpaceId: string | null;
+  clickupListId: string | null;
+  openaiConfigured: boolean;
+}
+
+export interface SettingsTestResult {
+  anthropic: { ok: boolean; message: string };
+  clickup: { ok: boolean; message: string };
+}
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -166,4 +181,20 @@ export const api = {
 
   // Dashboard
   dashboard: () => request<DashboardSummary>("/dashboard/summary"),
+
+  // Settings (credenciales editables desde la UI)
+  getSettings: () => request<SettingsStatus>("/settings"),
+  saveSettings: (input: {
+    anthropicApiKey?: string;
+    clickupApiToken?: string;
+    clickupSpaceId?: string;
+    clickupListId?: string;
+    openaiApiKey?: string;
+  }) =>
+    request<SettingsStatus>("/settings", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  testSettings: () =>
+    request<SettingsTestResult>("/settings/test", { method: "POST" }),
 };

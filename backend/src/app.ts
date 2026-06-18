@@ -10,6 +10,7 @@ import { tasksRouter } from "./routes/tasks";
 import { clickupRouter } from "./routes/clickup";
 import { productionRouter } from "./routes/production";
 import { dashboardRouter } from "./routes/dashboard";
+import { settingsRouter } from "./routes/settings";
 
 export function createApp() {
   const app = express();
@@ -28,6 +29,7 @@ export function createApp() {
   app.use("/api/clickup", clickupRouter);
   app.use("/api/production", productionRouter);
   app.use("/api/dashboard", dashboardRouter);
+  app.use("/api/settings", settingsRouter);
 
   // 404 for unknown API routes.
   app.use((req, res) => {

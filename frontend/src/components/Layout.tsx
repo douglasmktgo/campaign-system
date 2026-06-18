@@ -4,6 +4,7 @@ import { NavLink } from "react-router-dom";
 const navItems = [
   { to: "/", label: "Capturar brief", end: true },
   { to: "/dashboard", label: "Dashboard" },
+  { to: "/settings", label: "Configuración" },
 ];
 
 export default function Layout({ children }: { children: ReactNode }) {

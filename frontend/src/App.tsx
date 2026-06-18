@@ -5,6 +5,7 @@ import TaskReview from "./pages/TaskReview";
 import SyncConfirmation from "./pages/SyncConfirmation";
 import TaskClose from "./pages/TaskClose";
 import Dashboard from "./pages/Dashboard";
+import Settings from "./pages/Settings";
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="/campaigns/:id/sync" element={<SyncConfirmation />} />
         <Route path="/campaigns/:id/close" element={<TaskClose />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/settings" element={<Settings />} />
       </Routes>
     </Layout>
   );

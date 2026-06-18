@@ -64,6 +64,11 @@ Variables en `.env` (ninguna se commitea — `.env` está en `.gitignore`):
 > El backend **arranca aunque falten claves**. Cada endpoint que necesita una clave devuelve un
 > error JSON claro (HTTP 4xx/5xx) sin tumbar el servidor. Así puedes probar el flujo por partes.
 
+> 💡 **No hace falta editar `.env` a mano.** La app tiene una pantalla **Configuración** donde
+> pegas las API keys (Anthropic, ClickUp, OpenAI) y un botón *Probar conexión*. Se guardan en
+> `backend/config.local.json` (ignorado por git) y tienen prioridad sobre `.env`. El `.env` sigue
+> funcionando como respaldo si prefieres ese método.
+
 ### 2. Frontend
 
 ```bash
@@ -149,6 +154,8 @@ campaign-system/
 | POST | `/api/clickup/sync/:campaignId` | Sincroniza tareas `pending` con ClickUp (solo bajo confirmación). |
 | POST | `/api/production/:taskId` | Registra modo + minutos ahorrados, cierra tarea y refleja en ClickUp. |
 | GET  | `/api/dashboard/summary` | Métricas agregadas. |
+| GET/POST | `/api/settings` | Estado / guardado de las API keys (desde la UI). |
+| POST | `/api/settings/test` | Prueba la conexión con Anthropic y ClickUp. |
 
 ---
 

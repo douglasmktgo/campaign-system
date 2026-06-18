@@ -6,6 +6,7 @@ import {
   createTask,
   resolveProductionFields,
 } from "../services/clickupClient";
+import { getSetting } from "../lib/settings";
 
 export const clickupRouter = Router();
 
@@ -23,7 +24,7 @@ clickupRouter.post(
     // 1. Ensure a ClickUp List exists for this campaign.
     let listId = campaign.clickupListId;
     if (!listId) {
-      const spaceId = process.env.CLICKUP_SPACE_ID ?? "";
+      const spaceId = getSetting("clickupSpaceId") ?? "";
       listId = await createList(spaceId, campaign.name);
       await prisma.campaign.update({
         where: { id: campaign.id },

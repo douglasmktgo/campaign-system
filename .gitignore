@@ -8,6 +8,7 @@
 **/.env
 **/.env.local
 !**/.env.example
+**/config.local.json
 
 # SQLite database
 **/*.db

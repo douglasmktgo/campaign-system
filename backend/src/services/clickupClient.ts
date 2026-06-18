@@ -1,4 +1,5 @@
 import { AppError } from "../lib/httpError";
+import { getSetting } from "../lib/settings";
 
 // Wrapper around the ClickUp API v2 (REST). Auth uses a Personal API Token,
 // which is sent raw in the Authorization header (no "Bearer " prefix).
@@ -16,11 +17,11 @@ export const PRIORITY_MAP: Record<string, number> = {
 };
 
 function getToken(): string {
-  const token = process.env.CLICKUP_API_TOKEN;
+  const token = getSetting("clickupApiToken");
   if (!token) {
     throw new AppError(
       500,
-      "CLICKUP_API_TOKEN no está configurado en el archivo .env del backend."
+      "El token de ClickUp no está configurado. Ponlo en la pantalla de Configuración (o en .env)."
     );
   }
   return token;
