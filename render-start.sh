@@ -3,4 +3,4 @@
 set -e
 cd backend
 npx prisma migrate deploy
-node dist/server.js
+npx tsx src/server.ts

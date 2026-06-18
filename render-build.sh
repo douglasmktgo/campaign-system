@@ -10,11 +10,10 @@ npm install --include=dev
 npm run build
 cd ..
 
-echo "==> Backend: install + generate + build"
+echo "==> Backend: install + prisma generate (se ejecuta con tsx, sin compilar)"
 cd backend
 npm install --include=dev
 npx prisma generate
-npm run build
 cd ..
 
 echo "==> Build completo."
