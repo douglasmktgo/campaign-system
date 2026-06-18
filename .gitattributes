@@ -1,0 +1,5 @@
+# Normaliza saltos de línea. Los scripts de shell SIEMPRE en LF para que
+# funcionen en el contenedor Linux de Codespaces.
+* text=auto eol=lf
+*.sh text eol=lf
+*.cjs text eol=lf

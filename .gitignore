@@ -1,0 +1,19 @@
+# Dependencies
+**/node_modules/
+
+# Build output
+**/dist/
+
+# Secrets — NUNCA subir las API keys
+**/.env
+**/.env.local
+!**/.env.example
+
+# SQLite database
+**/*.db
+**/*.db-journal
+**/dev.db*
+
+# Misc
+.DS_Store
+*.log
