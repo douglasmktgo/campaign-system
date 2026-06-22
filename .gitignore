@@ -9,6 +9,8 @@
 **/.env.local
 !**/.env.example
 **/config.local.json
+**/config.json
+simple/node_modules/
 
 # SQLite database
 **/*.db

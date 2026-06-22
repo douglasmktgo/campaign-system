@@ -1,0 +1,12 @@
+{
+  "name": "campaign-system-simple",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Versión mínima: brief -> IA -> ClickUp. Sin DB, sin build.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

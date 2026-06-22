@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Campañas IA → ClickUp</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif; background:#f1f5f9; color:#0f172a; }
+  header { background:#fff; border-bottom:1px solid #e2e8f0; padding:14px 20px; display:flex; align-items:center; gap:14px; }
+  header b { font-size:16px; }
+  .tabs { display:flex; gap:6px; margin-left:auto; }
+  .tab { border:0; background:none; padding:7px 14px; border-radius:8px; font-size:14px; cursor:pointer; color:#64748b; }
+  .tab.active { background:#eef2ff; color:#4338ca; font-weight:600; }
+  main { max-width:780px; margin:0 auto; padding:24px 16px 60px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:#64748b; font-size:14px; margin:0 0 18px; }
+  .card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:20px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+  label { display:block; font-size:13px; font-weight:600; margin-bottom:5px; }
+  input, textarea { width:100%; border:1px solid #cbd5e1; border-radius:9px; padding:10px; font-size:14px; font-family:inherit; outline:none; }
+  input:focus, textarea:focus { border-color:#6366f1; box-shadow:0 0 0 3px #e0e7ff; }
+  .hint { font-size:12px; color:#94a3b8; margin-top:4px; }
+  textarea { resize:vertical; min-height:150px; }
+  button.btn { background:#4f46e5; color:#fff; border:0; border-radius:9px; padding:10px 18px; font-size:14px; font-weight:600; cursor:pointer; }
+  button.btn:hover { background:#4338ca; }
+  button.btn:disabled { background:#a5b4fc; cursor:default; }
+  button.ghost { background:#fff; color:#475569; border:1px solid #cbd5e1; }
+  button.ghost:hover { background:#f8fafc; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .mt { margin-top:14px; }
+  .field { margin-bottom:14px; }
+  .msg { border-radius:9px; padding:11px 14px; font-size:14px; margin-bottom:14px; }
+  .msg.err { background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; }
+  .msg.ok { background:#ecfdf5; color:#047857; border:1px solid #a7f3d0; }
+  .msg.warn { background:#fffbeb; color:#92400e; border:1px solid #fde68a; }
+  .task { border:1px solid #e2e8f0; border-radius:11px; padding:14px; margin-bottom:10px; }
+  .task .top { display:flex; gap:8px; align-items:center; }
+  .task input.name { font-weight:600; border:1px solid transparent; }
+  .task input.name:hover { border-color:#e2e8f0; }
+  .badge { font-size:11px; padding:2px 8px; border-radius:99px; font-weight:600; }
+  .pri-alta { background:#fee2e2; color:#b91c1c; } .pri-media { background:#fef3c7; color:#b45309; } .pri-baja { background:#e2e8f0; color:#475569; }
+  .opt { background:#e2e8f0; color:#475569; }
+  select { border:1px solid #cbd5e1; border-radius:7px; padding:5px; font-size:13px; }
+  .subs { margin:8px 0 0; padding-left:18px; color:#475569; font-size:13px; }
+  .x { margin-left:auto; border:0; background:none; color:#94a3b8; cursor:pointer; font-size:16px; }
+  .x:hover { color:#dc2626; }
+  a { color:#4f46e5; }
+  .pill { display:inline-block; width:10px; height:10px; border-radius:99px; }
+  .spin { display:inline-block; width:16px; height:16px; border:2px solid #c7d2fe; border-top-color:#4f46e5; border-radius:99px; animation:s .7s linear infinite; vertical-align:middle; }
+  @keyframes s { to { transform:rotate(360deg); } }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<header>
+  <span>⚡</span><b>Campañas IA → ClickUp</b>
+  <div class="tabs">
+    <button class="tab active" id="tab-capturar" onclick="showTab('capturar')">Capturar</button>
+    <button class="tab" id="tab-config" onclick="showTab('config')">Configuración</button>
+  </div>
+</header>
+<main>
+
+  <!-- ===== CAPTURAR ===== -->
+  <section id="view-capturar">
+    <h1>Capturar brief</h1>
+    <p class="sub">Pega el brief, la IA lo ordena en tareas, lo revisas y lo envías a ClickUp.</p>
+    <div id="cap-msg"></div>
+    <div id="cfg-warn"></div>
+
+    <div class="card">
+      <div class="field">
+        <label>Nombre de la campaña (opcional)</label>
+        <input id="campName" placeholder="Ej: Lanzamiento verano" />
+      </div>
+      <div class="field">
+        <label>Brief</label>
+        <textarea id="brief" placeholder="Describe la campaña: objetivos, entregables, plazos, condicionales ('si da el tiempo…')…"></textarea>
+      </div>
+      <button class="btn" id="btnInterpret" onclick="interpret()">Interpretar con IA</button>
+    </div>
+
+    <div id="results"></div>
+  </section>
+
+  <!-- ===== CONFIG ===== -->
+  <section id="view-config" class="hidden">
+    <h1>Configuración</h1>
+    <p class="sub">Pega tus claves. Se guardan en el servidor y se usan automáticamente.</p>
+    <div id="cfg-msg"></div>
+    <div class="card">
+      <div class="field">
+        <label>Anthropic API key <span id="s-anthropic"></span></label>
+        <input id="anthropic" type="password" placeholder="sk-ant-... (deja vacío para no cambiar)" />
+        <div class="hint">Para interpretar el brief con IA.</div>
+      </div>
+      <div class="field">
+        <label>ClickUp · Personal API Token <span id="s-clickup"></span></label>
+        <input id="clickupToken" type="password" placeholder="pk_... (deja vacío para no cambiar)" />
+        <div class="hint">ClickUp → Settings → Apps → API Token.</div>
+      </div>
+      <div class="field">
+        <label>ClickUp · Space ID</label>
+        <input id="clickupSpace" placeholder="Ej: 90123456" />
+        <div class="hint">En la URL del Space, el número después de /s/.</div>
+      </div>
+      <div class="row">
+        <button class="btn" onclick="saveConfig()">Guardar</button>
+        <button class="btn ghost" onclick="testConfig()">Probar conexión</button>
+      </div>
+      <div id="test-out" class="mt"></div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+let TASKS = [];
+
+function showTab(t) {
+  document.getElementById("view-capturar").classList.toggle("hidden", t !== "capturar");
+  document.getElementById("view-config").classList.toggle("hidden", t !== "config");
+  document.getElementById("tab-capturar").classList.toggle("active", t === "capturar");
+  document.getElementById("tab-config").classList.toggle("active", t === "config");
+  if (t === "config") loadConfig();
+}
+
+function msg(id, kind, html) {
+  document.getElementById(id).innerHTML = html ? '<div class="msg ' + kind + '">' + html + '</div>' : '';
+}
+
+async function api(url, body) {
+  const r = await fetch(url, {
+    method: body ? "POST" : "GET",
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || ("Error " + r.status));
+  return data;
+}
+
+// ---- Config ----
+async function loadConfig() {
+  try {
+    const c = await api("/api/config");
+    document.getElementById("s-anthropic").innerHTML = c.anthropic ? '<span class="badge pri-baja">configurada</span>' : '';
+    document.getElementById("s-clickup").innerHTML = c.clickup ? '<span class="badge pri-baja">configurado</span>' : '';
+    if (c.clickupSpace) document.getElementById("clickupSpace").value = c.clickupSpace;
+    checkReady(c);
+  } catch (e) {}
+}
+
+function checkReady(c) {
+  const warn = (!c.anthropic) ? "Falta la API key de Anthropic para interpretar. Ve a <b>Configuración</b>." : "";
+  msg("cfg-warn", "warn", warn);
+}
+
+async function saveConfig() {
+  msg("cfg-msg", "ok", "");
+  try {
+    await api("/api/config", {
+      anthropic: document.getElementById("anthropic").value,
+      clickupToken: document.getElementById("clickupToken").value,
+      clickupSpace: document.getElementById("clickupSpace").value,
+    });
+    document.getElementById("anthropic").value = "";
+    document.getElementById("clickupToken").value = "";
+    msg("cfg-msg", "ok", "Guardado correctamente.");
+    loadConfig();
+  } catch (e) { msg("cfg-msg", "err", e.message); }
+}
+
+async function testConfig() {
+  document.getElementById("test-out").innerHTML = '<span class="spin"></span> Probando…';
+  try {
+    const r = await api("/api/test", {});
+    const line = (label, x) => '<div class="msg ' + (x.ok ? "ok" : "err") + '">' + (x.ok ? "✓" : "✕") + " " + label + ": " + x.msg + '</div>';
+    document.getElementById("test-out").innerHTML = line("Anthropic", r.anthropic) + line("ClickUp", r.clickup);
+  } catch (e) { document.getElementById("test-out").innerHTML = '<div class="msg err">' + e.message + '</div>'; }
+}
+
+// ---- Interpretar ----
+async function interpret() {
+  msg("cap-msg", "err", "");
+  const brief = document.getElementById("brief").value.trim();
+  if (!brief) { msg("cap-msg", "err", "Escribe un brief primero."); return; }
+  const btn = document.getElementById("btnInterpret");
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Interpretando…';
+  try {
+    const data = await api("/api/interpret", { brief });
+    if (!document.getElementById("campName").value) document.getElementById("campName").value = data.campaignName || "";
+    TASKS = data.tasks || [];
+    renderTasks(data.objective);
+  } catch (e) {
+    msg("cap-msg", "err", e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = "Interpretar con IA";
+  }
+}
+
+function renderTasks(objective) {
+  if (!TASKS.length) { document.getElementById("results").innerHTML = '<div class="msg warn">La IA no propuso tareas. Ajusta el brief.</div>'; return; }
+  let h = '<div class="card"><h1 style="font-size:18px">Tareas propuestas (' + TASKS.length + ')</h1>';
+  if (objective) h += '<p class="sub">' + esc(objective) + '</p>';
+  TASKS.forEach((t, i) => { h += taskHtml(t, i); });
+  h += '<div class="row mt"><button class="btn" id="btnSync" onclick="sync()">Enviar a ClickUp</button></div>';
+  h += '<div id="sync-msg" class="mt"></div></div>';
+  document.getElementById("results").innerHTML = h;
+}
+
+function taskHtml(t, i) {
+  let h = '<div class="task">';
+  h += '<div class="top">';
+  h += '<input class="name" value="' + esc(t.name) + '" oninput="TASKS[' + i + '].name=this.value" />';
+  h += '<button class="x" onclick="removeTask(' + i + ')" title="Quitar">✕</button>';
+  h += '</div>';
+  h += '<div class="row mt">';
+  h += 'Prioridad: <select onchange="TASKS[' + i + '].priority=this.value">' +
+       opt("alta", t.priority) + opt("media", t.priority) + opt("baja", t.priority) + '</select>';
+  h += '<input type="date" value="' + (t.dueDate || "") + '" onchange="TASKS[' + i + '].dueDate=this.value||null" />';
+  if (t.isOptional) h += '<span class="badge opt">opcional</span>';
+  h += '</div>';
+  if (t.description) h += '<div class="hint mt">' + esc(t.description) + '</div>';
+  if (t.subtasks && t.subtasks.length) {
+    h += '<ul class="subs">';
+    t.subtasks.forEach(s => { h += '<li>' + esc(s) + '</li>'; });
+    h += '</ul>';
+  }
+  h += '</div>';
+  return h;
+}
+
+function opt(v, cur) { return '<option value="' + v + '"' + (v === cur ? ' selected' : '') + '>' + v + '</option>'; }
+function removeTask(i) { TASKS.splice(i, 1); renderTasks(); }
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c])); }
+
+// ---- Enviar a ClickUp ----
+async function sync() {
+  const btn = document.getElementById("btnSync");
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Enviando…';
+  msg("sync-msg", "err", "");
+  try {
+    const r = await api("/api/sync", { campaignName: document.getElementById("campName").value, tasks: TASKS });
+    let h = '<div class="msg ok">✓ Creado en ClickUp en la lista <b>' + esc(r.listName) + '</b> (' + r.created.length + ' tareas).</div>';
+    r.created.forEach(c => { h += '<div class="task"><div class="top">' + esc(c.name) + (c.url ? ' &nbsp;<a href="' + c.url + '" target="_blank">Abrir en ClickUp ↗</a>' : '') + '</div></div>'; });
+    document.getElementById("sync-msg").innerHTML = h;
+  } catch (e) {
+    msg("sync-msg", "err", e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = "Enviar a ClickUp";
+  }
+}
+
+// Al cargar, avisa si falta la key.
+loadConfig();
+</script>
+</body>
+</html>

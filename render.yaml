@@ -1,14 +1,13 @@
-# Blueprint de Render: publica todo como UN solo servicio web (una sola URL).
-# El backend Express sirve también el frontend ya compilado.
+# Blueprint de Render — versión MÍNIMA y robusta (carpeta simple/).
+# Sin base de datos, sin compilación: solo Express + fetch. Arranca en segundos.
 services:
   - type: web
     name: campaign-system
     runtime: node
     plan: free
-    buildCommand: bash render-build.sh
-    startCommand: bash render-start.sh
+    rootDir: simple
+    buildCommand: npm install
+    startCommand: node server.js
     envVars:
       - key: NODE_VERSION
         value: "20.18.0"
-      - key: DATABASE_URL
-        value: file:./dev.db
