@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loxita Promo</title>
+<style>
+@font-face { font-family: "Brico"; src: url("fonts/BricolageGrotesque.woff2") format("woff2"); font-weight: 200 800; }
+:root {
+  /* === IDENTIDAD LOXITA (provisional: cambia aquí los colores) === */
+  --ink: #1B0F2E;
+  --fucsia: #FF4FA3;
+  --rosa: #FFB3D6;
+  --morado: #5B2BFF;
+  --amarillo: #FFD43B;
+  --menta: #21D6A0;
+  --coral: #FF5A36;
+  --crema: #FFF6EC;
+  --blanco: #FFFFFF;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: #111; height: 100%; overflow: hidden; }
+body { display: flex; align-items: center; justify-content: center; font-family: "Brico", system-ui, sans-serif; }
+#stage { width: 1080px; height: 1920px; position: relative; overflow: hidden; background: var(--ink); transform-origin: center; flex: none; }
+.scene { position: absolute; inset: 0; display: none; overflow: hidden; }
+.abs { position: absolute; will-change: transform, opacity; }
+.center { left: 50%; top: 50%; }
+
+/* Teléfono */
+.phone { width: 540px; height: 1100px; border-radius: 86px; background: #EDEDF2; padding: 14px;
+  box-shadow: 0 40px 80px rgba(27,15,46,.28), inset 0 0 0 3px #cfcfd8; }
+.phone .scr { width: 100%; height: 100%; border-radius: 74px; overflow: hidden; position: relative; background: var(--blanco); }
+.phone .bar { position: absolute; top: 26px; left: 0; right: 0; height: 40px; display: flex; justify-content: space-between; align-items: center; padding: 0 44px; z-index: 5; }
+.phone .bar i { display: block; width: 64px; height: 12px; border-radius: 6px; background: currentColor; opacity: .85; }
+.phone .bar b { display: block; width: 150px; height: 44px; border-radius: 22px; background: #0b0b10; }
+.phone .scr.dark { background: #121016; color: #fff; }
+
+.h1 { font-weight: 800; letter-spacing: -0.04em; line-height: .92; }
+.pill { border-radius: 999px; font-weight: 700; display: flex; align-items: center; gap: 14px; white-space: nowrap; }
+.card { border-radius: 34px; }
+.row { display: flex; align-items: center; gap: 16px; }
+.chk { width: 30px; height: 30px; border: 3px solid #9a97a6; border-radius: 8px; flex: none; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<script>
+/* ================= CONFIGURACIÓN DE MARCA ================= */
+const BRAND = {
+  name: "Loxita",
+  tagline: "Lo bonito, a tu manera.",
+  user: "Ana",
+  copy: {
+    intro: "Presentamos",
+    notif: "¡Tu pedido ya va en camino!",
+    big1: ["Tu nueva", "app favorita"],
+    big2: ["Hecha", "para ti"],
+    goalQ: "¿Qué buscas hoy?",
+    goals: ["Un regalo especial", "Algo para mí", "Solo quiero mirar"],
+    interestsQ: "¿Qué te encanta?",
+    interests: ["Regalos", "Belleza", "Moda", "Hogar", "Fiestas", "Accesorios", "Papelería", "Bienestar", "Decoración", "Detalles"],
+    tilted: [["Ofertas flash", "Hasta 40% hoy"], ["Novedades", "Recién llegadas"]],
+    welcome: "¡Bienvenida a Loxita!",
+    welcomeSub: "Tu yo del futuro te lo agradece.",
+  },
+};
+const C = n => getComputedStyle(document.documentElement).getPropertyValue("--" + n).trim();
+
+/* ================= UTILIDADES ================= */
+const FPS = 30, DURATION = 15.8;
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const prog = (t, a, b) => clamp((t - a) / (b - a));
+const eOut = x => 1 - Math.pow(1 - x, 3);
+const eInOut = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const eBack = x => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+const lerp = (a, b, x) => a + (b - a) * x;
+const $ = (html) => { const d = document.createElement("div"); d.innerHTML = html.trim(); return d.firstElementChild; };
+const tf = (el, x, y, s = 1, r = 0, o = 1, extra = "") => {
+  el.style.transform = `translate(-50%,-50%) translate(${x}px,${y}px) ${extra} rotate(${r}deg) scale(${s})`;
+  el.style.opacity = o;
+};
+const stage = document.getElementById("stage");
+
+/* ================= PIEZAS GRÁFICAS (originales) ================= */
+const sparkle = (c, s = 60) => `<svg width="${s}" height="${s}" viewBox="0 0 100 100"><path d="M50 0 C55 38 62 45 100 50 C62 55 55 62 50 100 C45 62 38 55 0 50 C38 45 45 38 50 0Z" fill="${c}"/></svg>`;
+const logoMark = (s = 120) => `
+<svg width="${s}" height="${s}" viewBox="0 0 120 120">
+  <rect x="6" y="6" width="108" height="108" rx="40" fill="var(--fucsia)"/>
+  <path d="M40 30 v52 h40" stroke="#fff" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M86 18 C88 30 90 32 102 34 C90 36 88 38 86 50 C84 38 82 36 70 34 C82 32 84 30 86 18Z" fill="var(--amarillo)"/>
+</svg>`;
+const logo = (s = 120, color = "var(--ink)", sub = true) => `
+<div class="row" style="gap:${s * .22}px">
+  ${logoMark(s)}
+  <div>
+    <div class="h1" style="font-size:${s * .62}px;color:${color}">${BRAND.name}</div>
+    ${sub ? `<div style="font-size:${s * .2}px;font-weight:600;white-space:nowrap;color:${color};opacity:.85;margin-top:${s * .06}px">${BRAND.tagline}</div>` : ""}
+  </div>
+</div>`;
+// Bolsa de regalo
+const giftBag = (s = 1) => `
+<svg width="${300 * s}" height="${300 * s}" viewBox="0 0 300 300">
+  <path d="M95 110 C95 60 145 60 145 110" stroke="var(--ink)" stroke-width="10" fill="none"/>
+  <rect x="50" y="105" width="140" height="170" rx="10" fill="var(--morado)"/>
+  <rect x="150" y="125" width="110" height="150" rx="10" fill="var(--amarillo)"/>
+  <path d="M180 135 C180 100 230 100 230 135" stroke="var(--ink)" stroke-width="9" fill="none"/>
+  <rect x="120" y="150" width="90" height="125" rx="8" fill="var(--fucsia)"/>
+  <circle cx="165" cy="205" r="18" fill="var(--blanco)"/>
+  <path d="M157 205 l6 6 l12 -13" stroke="var(--fucsia)" stroke-width="6" fill="none" stroke-linecap="round"/>
+</svg>`;
+// Collage geométrico
+const collage = () => `
+<svg width="460" height="420" viewBox="0 0 460 420">
+  <circle cx="130" cy="250" r="110" fill="var(--morado)"/>
+  <path d="M230 360 a110 110 0 0 1 220 0z" fill="var(--coral)"/>
+  <rect x="250" y="80" width="140" height="140" rx="30" fill="var(--amarillo)" transform="rotate(12 320 150)"/>
+  <circle cx="320" cy="150" r="38" fill="var(--fucsia)"/>
+  <path d="M60 60 h120 v120 a120 120 0 0 1 -120 -120z" fill="var(--menta)"/>
+  <circle cx="130" cy="250" r="45" fill="var(--blanco)"/>
+  <circle cx="130" cy="250" r="20" fill="var(--ink)"/>
+  <rect x="200" y="270" width="70" height="70" fill="var(--ink)" transform="rotate(45 235 305)"/>
+</svg>`;
+const tile = (bg, shape) => `<div class="card" style="flex:1;height:170px;background:${bg};border-radius:24px;display:flex;align-items:center;justify-content:center">${shape}</div>`;
+
+/* ================= PANTALLAS DEL TELÉFONO ================= */
+function phone(inner, dark = false, barColor = "#1B0F2E") {
+  return `<div class="phone abs center"><div class="scr ${dark ? "dark" : ""}">
+    <div class="bar" style="color:${dark ? "#fff" : barColor}"><i></i><b></b><i style="width:40px"></i></div>
+    ${inner}</div></div>`;
+}
+const scrNotif = () => `
+  <div style="position:absolute;inset:0;background:var(--fucsia)"></div>
+  <div style="position:absolute;left:30px;top:140px">${collage()}</div>`;
+const scrHome = () => `
+  <div style="padding:110px 34px 0">
+    <div class="row" style="justify-content:space-between">
+      <div class="h1" style="font-size:44px;color:var(--fucsia)">Hola, ${BRAND.user}</div>
+      <div class="row" style="gap:10px"><span style="width:38px;height:38px;border-radius:50%;border:4px solid var(--menta)"></span><span style="width:38px;height:38px;border-radius:50%;background:var(--menta)"></span></div>
+    </div>
+    <div class="hcard" style="height:200px;margin-top:26px"></div>
+    <div style="font-weight:700;font-size:22px;margin:20px 0 12px">Descubre</div>
+    <div class="row" style="gap:12px">
+      ${tile("var(--coral)", sparkle("var(--amarillo)", 70))}
+      ${tile("var(--rosa)", `<div style="width:70px;height:70px;border-radius:50%;background:var(--morado)"></div>`)}
+      ${tile("var(--ink)", `<div style="width:60px;height:80px;border-radius:14px;background:var(--amarillo)"></div>`)}
+    </div>
+    <div class="row" style="justify-content:space-between;margin:26px 0 10px"><b style="font-size:22px">Actividad</b><span style="color:var(--menta);font-size:18px;font-weight:700">Ver todo</span></div>
+    ${[["var(--fucsia)", "Pedido #1042", "Enviado"], ["var(--coral)", "Cupón LOXI10", "-10%"], ["var(--morado)", "Puntos ganados", "+320"], ["var(--rosa)", "Lista guardada", "6 ideas"]].map(([c, a, b]) => `
+      <div class="row" style="justify-content:space-between;padding:12px 0;border-bottom:1px solid #eee;font-size:19px">
+        <div class="row" style="gap:14px"><span style="width:34px;height:34px;border-radius:8px;background:${c}"></span>${a}</div><span style="color:var(--menta);font-weight:700">${b}</span></div>`).join("")}
+  </div>`;
+const homeCard = () => `
+  <div class="card abs center" style="width:540px;height:220px;background:var(--ink);color:#fff;padding:28px 34px;box-shadow:0 30px 60px rgba(0,0,0,.3)">
+    <div style="font-size:22px;opacity:.8">Tus puntos ${BRAND.name}</div>
+    <div class="h1" style="font-size:72px;margin-top:10px">2.480 pts</div>
+    <div style="font-size:20px;color:var(--menta);margin-top:12px;font-weight:700">+320 esta semana · nivel Fan</div>
+    <div class="abs" style="right:28px;top:26px">${sparkle("#fff", 46)}</div>
+  </div>`;
+const scrLists = () => `
+  <div style="position:absolute;inset:0;background:var(--rosa)"></div>
+  <div style="position:relative;padding:110px 26px 0">
+    <div class="row"><span style="width:44px;height:44px;border-radius:50%;background:var(--morado);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800">‹</span>
+      <div class="h1" style="font-size:44px;color:var(--morado)">Mis listas</div></div>
+    <div class="lists" style="margin-top:26px;display:flex;flex-direction:column;gap:20px">
+      ${[["#fff", "var(--morado)", "Cumple de Sofi", "6 ideas", "var(--ink)"], ["var(--ink)", "var(--menta)", "Noche de chicas", "4 ideas", "#fff"], ["var(--morado)", "var(--amarillo)", "Mi wishlist", "12 ideas", "#fff"], ["var(--coral)", "#fff", "Para mamá", "3 ideas", "#fff"]].map(([bg, acc, t, n, fg]) => `
+        <div class="card" style="height:230px;background:${bg};border:4px solid ${acc};padding:26px;position:relative;color:${fg}">
+          <div style="font-size:22px;opacity:.75;text-align:right">${t}</div>
+          <div class="h1" style="font-size:58px;text-align:right;color:${acc};margin-top:8px">${n}</div>
+          <div class="abs" style="left:26px;bottom:26px;width:150px;height:110px;border-radius:20px;background:${acc};opacity:.9"></div>
+          <div class="abs" style="left:90px;bottom:60px">${sparkle(bg === "#fff" ? "var(--fucsia)" : "var(--fucsia)", 70)}</div>
+          <div class="abs" style="right:26px;bottom:24px;width:46px;height:46px;border-radius:12px;background:${acc};color:${bg};display:flex;align-items:center;justify-content:center;font-weight:800">›</div>
+        </div>`).join("")}
+    </div>
+  </div>`;
+const scrGoal = () => `
+  <div style="position:absolute;left:0;right:0;top:0;height:560px;background:var(--morado)"></div>
+  <div style="position:relative;padding:110px 30px 0;color:#fff">
+    <span style="width:44px;height:44px;border-radius:50%;background:#fff;display:inline-block"></span>
+    <div style="height:250px;position:relative">
+      <div class="abs" style="left:10px;top:30px">${sparkle("#fff", 60)}</div>
+      <div class="abs" style="right:20px;top:40px">${sparkle("var(--rosa)", 40)}</div>
+      <svg class="abs" style="left:70px;top:40px" width="330" height="200" viewBox="0 0 330 200">
+        ${[0, 1, 2, 3, 4].map(i => `<rect x="${20 + i * 62}" y="${150 - i * 30}" width="44" height="${40 + i * 30}" rx="10" fill="${["var(--rosa)", "var(--amarillo)", "var(--coral)", "var(--menta)", "var(--amarillo)"][i]}"/>`).join("")}
+      </svg>
+    </div>
+    <div class="h1" style="font-size:46px;color:var(--rosa)">${BRAND.copy.goalQ}</div>
+    <div style="font-size:19px;margin-top:10px;opacity:.9">Así te mostramos lo que más te va.</div>
+  </div>
+  <div style="padding:60px 30px 0">
+    <div style="font-weight:700;font-size:21px;margin-bottom:18px">Elige una opción</div>
+    ${BRAND.copy.goals.map((g, i) => `<div class="row goal" style="padding:14px 0;font-size:22px"><span class="chk" data-i="${i}"></span>${g}</div>`).join("")}
+  </div>`;
+const scrCollections = () => `
+  <div style="padding:110px 26px 0">
+    <div class="h1" style="font-size:38px;color:var(--morado)">Colecciones</div>
+    <div style="font-size:17px;color:#777;margin:8px 0 18px">Elige un estilo y deja que te inspire.</div>
+    ${[["var(--amarillo)", "Dulce & Rosa"], ["var(--coral)", "Fiesta total"], ["var(--morado)", "Minimal chic"], ["var(--menta)", "Hecho a mano"]].map(([c, t]) => `
+      <div class="card" style="height:150px;background:${c};margin-bottom:18px;padding:22px;position:relative;border-radius:22px">
+        <div class="h1" style="font-size:34px;color:${c === "var(--amarillo)" || c === "var(--menta)" ? "var(--ink)" : "#fff"}">${t}</div>
+        <div class="abs" style="right:22px;bottom:18px">${sparkle("var(--fucsia)", 60)}</div></div>`).join("")}
+  </div>`;
+const pillColors = [["var(--fucsia)", "#fff"], ["var(--morado)", "#fff"], ["var(--amarillo)", "var(--ink)"], ["var(--menta)", "var(--ink)"], ["var(--coral)", "#fff"], ["var(--rosa)", "var(--ink)"]];
+const scrInterests = () => `
+  <div style="padding:110px 30px 0">
+    <div class="row" style="gap:12px"><span style="width:40px;height:40px;border-radius:50%;background:var(--menta)"></span>
+    <div class="h1" style="font-size:42px;color:var(--menta)">${BRAND.copy.interestsQ}</div></div>
+    <div style="font-size:18px;opacity:.8;margin:10px 0 30px">Así personalizamos tu experiencia.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:16px">
+      ${BRAND.copy.interests.map((p, i) => `<div class="pill ipill" data-i="${i}" style="padding:16px 24px;font-size:22px;border:3px solid ${pillColors[i % 6][0]};color:#fff">${p}</div>`).join("")}
+    </div>
+    <div class="pill" style="position:absolute;left:30px;right:30px;bottom:60px;height:84px;justify-content:center;background:var(--menta);color:var(--ink);font-size:26px">Continuar</div>
+  </div>`;
+const scrDone = () => `
+  <div style="padding:200px 30px 0;text-align:center">
+    <svg width="360" height="360" viewBox="0 0 360 360" style="display:block;margin:0 auto">
+      <rect x="70" y="160" width="220" height="170" rx="16" fill="var(--fucsia)"/>
+      <rect x="55" y="120" width="250" height="60" rx="14" fill="var(--coral)"/>
+      <rect x="165" y="120" width="30" height="210" fill="var(--amarillo)"/>
+      <path d="M180 120 C130 60 90 90 130 120 Z M180 120 C230 60 270 90 230 120 Z" fill="var(--amarillo)"/>
+      <g class="conf"><circle cx="60" cy="60" r="12" fill="var(--menta)"/><circle cx="300" cy="50" r="10" fill="var(--rosa)"/><rect x="290" y="200" width="20" height="20" fill="var(--morado)" transform="rotate(30 300 210)"/></g>
+    </svg>
+    <div class="h1" style="font-size:44px;color:var(--menta);margin-top:40px">${BRAND.copy.welcome}</div>
+    <div style="font-size:20px;opacity:.85;margin-top:14px">${BRAND.copy.welcomeSub}</div>
+    <div class="pill" style="position:absolute;left:30px;right:30px;bottom:60px;height:84px;justify-content:center;background:var(--menta);color:var(--ink);font-size:26px">Empezar</div>
+  </div>`;
+const scrLogo = () => `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">${logo(84, "var(--ink)")}</div>`;
+
+/* ================= ESCENAS ================= */
+const scenes = [];
+function scene(start, end, bg, build, update) {
+  const el = document.createElement("div");
+  el.className = "scene"; el.style.background = bg;
+  stage.appendChild(el);
+  const refs = build(el) || {};
+  scenes.push({ start, end, el, refs, update });
+}
+const add = (el, html) => { const n = $(html); el.appendChild(n); return n; };
+
+// A · Intro negra
+scene(0, 1.4, "#0E0A14", el => ({
+  t: add(el, `<div class="abs center h1" style="color:#fff;font-size:76px">${BRAND.copy.intro}</div>`),
+  s: add(el, `<div class="abs center">${sparkle("var(--fucsia)", 70)}</div>`),
+}), (r, t) => {
+  const a = eOut(prog(t, .15, .7));
+  tf(r.t, 0, lerp(30, 0, a), lerp(.92, 1, a), 0, a);
+  const b = eBack(prog(t, .55, .95));
+  tf(r.s, 270, -60, b, t * 120, b > 0 ? 1 : 0);
+});
+
+// B · Notificación sobre fucsia
+scene(1.4, 2.9, "var(--fucsia)", el => ({
+  p: add(el, phone(scrNotif())),
+  n: add(el, `<div class="abs center card row" style="width:520px;height:120px;background:#fff;padding:20px;gap:18px;border-radius:28px;box-shadow:0 20px 40px rgba(0,0,0,.18)">
+      ${logoMark(76)}<div><div style="font-weight:800;font-size:26px">${BRAND.name}</div><div style="font-size:21px;opacity:.75">${BRAND.copy.notif}</div></div></div>`),
+}), (r, t) => {
+  const a = eInOut(prog(t, 0, 1.4));
+  tf(r.p, lerp(140, 60, a), lerp(-200, -420, a), 1.15, -2);
+  const n = eBack(prog(t, .35, .8));
+  tf(r.n, lerp(500, 120, n), lerp(160, 40, a), 1, 0, n > 0 ? 1 : 0);
+});
+
+// C · Home + tarjeta que salta
+scene(2.9, 4.3, "var(--blanco)", el => ({
+  p: add(el, phone(scrHome())),
+  c: add(el, homeCard()),
+}), (r, t) => {
+  const a = eOut(prog(t, 0, .6));
+  tf(r.p, 0, lerp(900, 60, a), .98, lerp(8, 0, a));
+  const c = eBack(prog(t, .45, .9));
+  tf(r.c, lerp(0, 10, c), lerp(900, -230, a), lerp(.85, 1.12, c), lerp(0, -5, c), 1);
+});
+
+// D · Bolsa + destellos
+scene(4.3, 5.2, "var(--blanco)", el => ({
+  b: add(el, `<div class="abs center">${giftBag(1.2)}</div>`),
+  s1: add(el, `<div class="abs center">${sparkle("var(--ink)", 80)}</div>`),
+  s2: add(el, `<div class="abs center">${sparkle("var(--menta)", 50)}</div>`),
+  d: add(el, `<div class="abs center" style="width:22px;height:22px;border-radius:50%;background:var(--amarillo)"></div>`),
+}), (r, t) => {
+  const a = eBack(prog(t, 0, .45));
+  tf(r.b, 0, lerp(80, 0, a), a, lerp(-10, 0, a));
+  const s = eBack(prog(t, .15, .55));
+  tf(r.s1, -230, -200, s, t * 90);
+  tf(r.s2, 250, -40, s, -t * 120);
+  tf(r.d, -90, -330 + t * 30, s);
+});
+
+// E · Mis listas (scroll)
+scene(5.2, 6.6, "var(--crema)", el => ({ p: add(el, phone(scrLists())) }), (r, t) => {
+  const a = eOut(prog(t, 0, .5));
+  tf(r.p, 0, lerp(700, 120, a), 1.18, 0);
+  const l = r.p.querySelector(".lists");
+  l.style.transform = `translateY(${-eInOut(prog(t, .5, 1.3)) * 260}px)`;
+});
+
+// F · Texto grande + teléfono
+scene(6.6, 8.0, "var(--fucsia)", el => ({
+  t1: add(el, `<div class="abs h1" style="left:60px;top:120px;font-size:180px;color:#fff;white-space:nowrap">${BRAND.copy.big1[0]}</div>`),
+  t2: add(el, `<div class="abs h1" style="left:150px;top:290px;font-size:180px;color:#fff;white-space:nowrap">${BRAND.copy.big1[1]}</div>`),
+  p: add(el, phone(scrGoal())),
+}), (r, t) => {
+  const a = eOut(prog(t, 0, .5));
+  r.t1.style.transform = `translateX(${lerp(-300, 0, a) - t * 30}px)`; r.t1.style.opacity = a;
+  const b = eOut(prog(t, .1, .6));
+  r.t2.style.transform = `translateX(${lerp(300, 0, b) - t * 30}px)`; r.t2.style.opacity = b;
+  const p = eOut(prog(t, .15, .8));
+  tf(r.p, 0, lerp(1300, 560, p), 1.05, 0);
+  r.p.querySelectorAll(".chk").forEach((c, i) => {
+    const on = i === 0 && t > 1.0;
+    c.style.background = on ? "var(--fucsia)" : "transparent";
+    c.style.borderColor = on ? "var(--fucsia)" : "#9a97a6";
+  });
+});
+
+// G · Tarjetas inclinadas + colecciones
+scene(8.0, 9.4, "var(--blanco)", el => {
+  const mk = (bg, fg, [a, b]) => add(el, `<div class="abs center card" style="width:600px;height:230px;background:${bg};color:${fg};padding:30px 36px;border-radius:24px;box-shadow:-30px 40px 0 rgba(27,15,46,.08)">
+      <div style="font-size:24px;opacity:.85">${b}</div><div class="h1" style="font-size:74px;margin-top:10px">${a}</div>
+      <div class="abs" style="right:30px;bottom:24px">${sparkle(fg, 70)}</div></div>`);
+  return {
+    c1: mk("var(--amarillo)", "var(--ink)", BRAND.copy.tilted[0]),
+    c2: mk("var(--coral)", "#fff", BRAND.copy.tilted[1]),
+    p: add(el, phone(scrCollections())),
+  };
+}, (r, t) => {
+  const a = eOut(prog(t, 0, .6)), out = eInOut(prog(t, .6, .9));
+  tf(r.c1, lerp(-700, 40, a) + out * 1100, lerp(-500, -160, a) + out * 500, 1, 22, 1, "skewX(-8deg)");
+  tf(r.c2, lerp(-900, 0, eOut(prog(t, .08, .68))) + out * 1100, lerp(-300, 120, a) + out * 500, 1, 22, 1, "skewX(-8deg)");
+  const p = eOut(prog(t, .75, 1.2));
+  tf(r.p, 0, 0, lerp(.4, .82, p), 0, p);
+});
+
+// H · Píldoras cayendo
+scene(9.4, 10.6, "var(--blanco)", el => {
+  const words = ["Regalos", "Belleza", "Moda", "Hogar", "Fiestas"];
+  return { ps: words.map((w, i) => add(el, `<div class="abs center pill" style="padding:30px 56px;font-size:64px;background:${pillColors[i][0]};color:${pillColors[i][1]};box-shadow:0 16px 30px rgba(0,0,0,.12)">${sparkle(pillColors[(i + 2) % 6][0], 54)}${w}</div>`)) };
+}, (r, t) => {
+  const conf = [[-120, -40, -35, 0], [220, -10, 28, .1], [-60, 10, -20, .05], [180, 30, 40, .15], [-200, 50, 55, .2]];
+  r.ps.forEach((p, i) => {
+    const [x, d, rot, delay] = conf[i];
+    const k = clamp(t - delay, 0, 2);
+    const y = -1250 + i * 50 + k * 1500 + k * k * 300 - 600 * Math.max(0, k - .6) * 0;
+    tf(p, x + d * k * 4, y + i * 140, 1, rot + k * rot * 1.5);
+  });
+});
+
+// I · Pantalla de intereses
+scene(10.6, 11.9, "var(--blanco)", el => ({ p: add(el, phone(scrInterests(), true)) }), (r, t) => {
+  const a = eOut(prog(t, 0, .4));
+  tf(r.p, 0, lerp(200, 0, a), lerp(.8, 1.05, a), 0, a);
+  r.p.querySelectorAll(".ipill").forEach((p, i) => {
+    const on = [0, 1, 4, 8].includes(i) && t > .4 + i * .07;
+    const [bg, fg] = pillColors[i % 6];
+    p.style.background = on ? bg : "transparent";
+    p.style.color = on ? fg : "#fff";
+    p.style.transform = on && t < .55 + i * .07 ? "scale(1.08)" : "scale(1)";
+  });
+});
+
+// J · "Hecha para ti" (morado → fucsia)
+scene(11.9, 12.9, "var(--morado)", el => ({
+  t1: add(el, `<div class="abs h1" style="left:60px;top:140px;font-size:200px;color:#fff;white-space:nowrap">${BRAND.copy.big2[0]}</div>`),
+  t2: add(el, `<div class="abs h1" style="left:300px;top:320px;font-size:200px;color:#fff;white-space:nowrap">${BRAND.copy.big2[1]}</div>`),
+  p1: add(el, phone(scrDone(), true)),
+  p2: add(el, phone(scrLogo())),
+}), (r, t, el) => {
+  const sw = t > .5;
+  el.style.background = sw ? "var(--fucsia)" : "var(--morado)";
+  r.t1.style.transform = `translateX(${-t * 40}px)`; r.t2.style.transform = `translateX(${-t * 40}px)`;
+  const p = eOut(prog(t, 0, .35));
+  tf(r.p1, 0, lerp(1200, 520, p), 1.05, 0, sw ? 0 : 1);
+  tf(r.p2, 0, 520 - (t - .5) * 40, 1.05, 0, sw ? 1 : 0);
+});
+
+// K · Cierre con logo
+scene(12.9, DURATION + 1, "var(--coral)", el => ({
+  l: add(el, `<div class="abs center">${logo(170, "#fff")}</div>`),
+  s1: add(el, `<div class="abs center">${sparkle("var(--amarillo)", 90)}</div>`),
+  s2: add(el, `<div class="abs center">${sparkle("#fff", 50)}</div>`),
+}), (r, t) => {
+  const a = eBack(prog(t, 0, .5));
+  tf(r.l, 0, 0, lerp(.6, 1, a), 0, clamp(a * 2));
+  const s = eBack(prog(t, .3, .8));
+  tf(r.s1, 360, -230, s, t * 60);
+  tf(r.s2, -380, 220, s, -t * 80);
+});
+
+/* ================= MOTOR ================= */
+function seek(t) {
+  for (const s of scenes) {
+    const on = t >= s.start && t < s.end;
+    s.el.style.display = on ? "block" : "none";
+    if (on) s.update(s.refs, t - s.start, s.el);
+  }
+}
+window.seek = seek;
+window.DURATION = DURATION; window.FPS = FPS;
+
+function fit() {
+  const k = Math.min(innerWidth / 1080, innerHeight / 1920);
+  stage.style.transform = `scale(${k})`;
+}
+addEventListener("resize", fit); fit();
+
+// Reproducción en vivo (desactivada con ?render)
+if (!location.search.includes("render")) {
+  let t0 = performance.now();
+  const loop = now => { seek(((now - t0) / 1000) % DURATION); requestAnimationFrame(loop); };
+  document.fonts.ready.then(() => requestAnimationFrame(loop));
+} else { seek(0); }
+</script>
+</body>
+</html>
