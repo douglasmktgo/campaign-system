@@ -1,5 +1,7 @@
 # Studio — publica en Instagram con un agente que solo actúa cuando tú apruebas
 
+> **¿Primera vez?** Sigue [PRIMEROS-PASOS.md](PRIMEROS-PASOS.md): de cero a tu primera publicación.
+
 Studio es una app web para:
 
 1. **Conectar** tus cuentas de Instagram (una o varias).
