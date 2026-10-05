@@ -51,11 +51,8 @@ cd studio && npm install && npm start   # http://localhost:4100
 cd studio && npm test                   # pruebas de validación
 ```
 
-## Ideas pendientes (no hechas aún)
+## Próximos pasos
 
-- Analizar vídeos/reels de referencia fotograma a fotograma (hoy: capturas + texto).
-
-- Renovación automática de tokens de Instagram (caducan a los 60 días).
-- Inicio de sesión con Instagram (OAuth) en vez de pegar el token.
-- Métricas de cada publicación (alcance, likes) desde la API de Insights.
-- Varios usuarios/roles (diseñador sube, cliente aprueba).
+Ver **`studio/HOJA-DE-RUTA.md`**: WhatsApp (avisos, muestras y aprobaciones con botones, resumen diario) y
+planificador mensual/semanal con días y horas óptimas según la audiencia de cada cuenta. Orden: desplegar →
+planificador → WhatsApp.
