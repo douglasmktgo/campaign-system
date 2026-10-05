@@ -29,6 +29,9 @@ const ICONS = {
   trash: '<path d="M4 7h16M10 11v6M14 11v6M5 7l1 13a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1l1-13M9 7V4h6v3"/>',
   logout: '<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 17l5-5-5-5M15 12H3"/>',
   instagram: '<rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r=".6" fill="currentColor"/>',
+  bulb: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
+  flask: '<path d="M9 3h6M10 3v6L4.5 18.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.5L14 9V3"/><path d="M7 15h10"/>',
+  doc: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
   inbox: '<path d="M3 13h5l1.5 3h5l1.5-3h5"/><path d="M5 5h14l2 8v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6z"/>',
 };
 const icon = (name, extra = "") =>
@@ -116,13 +119,14 @@ const STATUS = {
   published: { label: "Publicado", cls: "pill-published" },
   rejected: { label: "Rechazado", cls: "pill-rejected" },
   failed: { label: "Error", cls: "pill-failed" },
+  idea: { label: "Idea", cls: "pill-idea" },
 };
 const pill = (status) => `<span class="pill ${STATUS[status].cls}">${STATUS[status].label}</span>`;
 const TYPE_ICON = { IMAGE: "image", CAROUSEL: "stack", REELS: "play" };
 const TYPE_LABEL = { IMAGE: "Imagen", CAROUSEL: "Carrusel", REELS: "Reel" };
 
 function mediaTag(m, attrs = "") {
-  if (!m) return `<div class="thumb"></div>`;
+  if (!m) return `<div class="thumb placeholder" ${attrs}>${icon("bulb")}</div>`;
   return m.mime.startsWith("video/")
     ? `<video src="${esc(m.url)}#t=0.5" muted playsinline preload="metadata" ${attrs}></video>`
     : `<img src="${esc(m.url)}" alt="" loading="lazy" ${attrs}>`;
@@ -167,6 +171,7 @@ async function refresh() {
 const NAV = [
   { id: "home", label: "Inicio", icon: "home" },
   { id: "approvals", label: "Aprobaciones", icon: "inbox" },
+  { id: "research", label: "Investigación", icon: "flask" },
   { id: "library", label: "Artes", icon: "grid" },
   { id: "calendar", label: "Calendario", icon: "calendar" },
   { id: "accounts", label: "Cuentas", icon: "instagram" },
@@ -234,7 +239,7 @@ function rerenderView() {
 }
 
 function viewHtml() {
-  const views = { home: homeView, approvals: approvalsView, library: libraryView, calendar: calendarView, accounts: accountsView, settings: settingsView };
+  const views = { research: researchView, home: homeView, approvals: approvalsView, library: libraryView, calendar: calendarView, accounts: accountsView, settings: settingsView };
   return (views[state.view] || homeView)();
 }
 
@@ -427,6 +432,7 @@ function approvalsView() {
 // ------------------------------------------------------------------ Artes
 const FILTERS = [
   ["all", "Todos"],
+  ["idea", "Ideas"],
   ["review", "En revisión"],
   ["approved", "Aprobados"],
   ["scheduled", "Programados"],
@@ -515,7 +521,9 @@ function accountsView() {
         <div class="row-main">
           <div class="row-title">@${esc(a.username)} ${a.demo ? `<span class="pill pill-review" style="margin-left:4px">Prueba</span>` : a.status === "error" ? `<span class="pill pill-failed" style="margin-left:4px">Revisar</span>` : ""}</div>
           <div class="row-sub">${esc(a.name || "")}${a.followers != null ? ` · ${a.followers.toLocaleString("es")} seguidores` : ""}</div>
+          <div class="row-sub" style="margin-top:4px">${profileComplete(a) ? `${esc(a.profile.kind || "Perfil")} · ${esc((a.profile.about || "").slice(0, 70))}` : `<span style="color:var(--orange)">Falta el perfil de marca</span>`}${a.canResearch ? ` · <span style="color:var(--green)">métricas de referencias activas</span>` : ""}</div>
         </div>
+        <button class="btn ${profileComplete(a) ? "" : "btn-primary"}" data-profile="${a.id}">Perfil de marca</button>
         <button class="btn" data-test-account="${a.id}">Probar</button>
         <button class="btn btn-icon btn-danger" data-remove-account="${a.id}" aria-label="Desconectar">${icon("trash")}</button>
       </div>`).join("")}</div>` : `
@@ -558,6 +566,355 @@ function openConnect() {
       rerenderView();
     });
   });
+}
+
+// ------------------------------------------------------------------ Perfil de marca
+const PROFILE_KINDS = ["Personal / profesional independiente", "Marca personal", "Empresa", "App o producto digital"];
+const PROFILE_UI = [
+  ["about", "Quién es / qué ofrece", "Ej.: Diseñador gráfico freelance especializado en branding e identidad visual."],
+  ["audience", "Público objetivo", "Ej.: Emprendedores y pymes de 25–45 años que necesitan una marca profesional."],
+  ["goals", "Objetivos", "Ej.: Ganar seguidores del sector y conseguir 5 clientes nuevos al mes (leads por DM)."],
+  ["tone", "Tono y estilo", "Ej.: Cercano, creativo y experto. Tuteo. Visual minimalista con color de acento."],
+  ["pillars", "Temas principales", "Ej.: Antes y después de marcas, consejos de diseño, proceso creativo, casos de clientes."],
+  ["cta", "Llamadas a la acción y captación de leads", "Ej.: «Escríbeme MARCA por DM», link en bio a formulario, guardar el post."],
+  ["avoid", "Qué evitar", "Ej.: Política, memes vulgares, prometer resultados que no se pueden garantizar."],
+];
+
+function profileComplete(a) {
+  const p = a.profile || {};
+  return ["about", "audience", "goals"].every((k) => (p[k] || "").trim());
+}
+
+function openProfile(accId) {
+  const a = accountById(accId);
+  const p = a.profile || {};
+  openSheet(`
+    <div class="sheet sheet-sm" id="profile-sheet">
+      <div class="sheet-head"><div style="display:flex;align-items:center;gap:10px">${avatar(a, "avatar-sm")}<h2>Perfil de marca · @${esc(a.username)}</h2></div><button class="btn btn-icon" data-close>${icon("x")}</button></div>
+      <form id="profile-form">
+        <div class="sheet-body">
+          <p class="muted small" style="margin-top:0">El agente usa este perfil para revisar artes, escribir copies e investigar contenido <strong>solo para esta cuenta</strong>. Cuanto más concreto, mejores ideas.</p>
+          <div class="field"><label>Tipo de cuenta</label>
+            <select class="select" name="kind"><option value="">Elige…</option>${PROFILE_KINDS.map((k) => `<option ${p.kind === k ? "selected" : ""}>${k}</option>`).join("")}</select></div>
+          ${PROFILE_UI.map(([k, label, ph]) => `<div class="field"><label>${label}</label><textarea class="textarea" style="min-height:64px" name="${k}" placeholder="${esc(ph)}">${esc(p[k] || "")}</textarea></div>`).join("")}
+          <div class="field"><label>Guía de contenido</label>
+            <textarea class="textarea" name="guide" placeholder="Pega aquí tu guía: lo que quieres, ejemplos que te gustan, reglas de marca… El agente la seguirá al pie de la letra.">${esc(p.guide || "")}</textarea>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
+              <label class="btn" style="cursor:pointer">${icon("doc")}Subir guía (PDF, TXT o MD)<input type="file" id="guide-file" accept="application/pdf,.txt,.md,text/plain,text/markdown" hidden></label>
+              <span id="guide-file-info" class="small muted">${p.guideFile ? `📄 ${esc(p.guideFile.name)} <button type="button" class="btn btn-ghost small" data-guide-remove>Quitar</button>` : ""}</span>
+            </div>
+          </div>
+        </div>
+        <div class="sheet-foot">
+          <button class="btn" type="button" data-profile-suggest style="margin-right:auto">${icon("spark")}Completar con IA</button>
+          <button class="btn" type="button" data-close>Cancelar</button>
+          <button class="btn btn-primary" type="submit">Guardar perfil</button>
+        </div>
+      </form>
+    </div>`);
+  const form = $("#profile-form");
+  const values = () => Object.fromEntries([...new FormData(form).entries()]);
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    busy(form.querySelector('[type="submit"]'), async () => {
+      await api(`/accounts/${accId}/profile`, { method: "PUT", body: values() });
+      await refresh();
+      closeSheet();
+      rerenderView();
+      toast("Perfil guardado");
+    });
+  });
+  $("#guide-file").addEventListener("change", async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    $("#guide-file-info").innerHTML = '<span class="spinner" style="width:14px;height:14px"></span>';
+    try {
+      await api(`/accounts/${accId}/profile`, { method: "PUT", body: values() });
+      const res = await fetch(`/api/accounts/${accId}/guide`, { method: "POST", headers: { "Content-Type": f.type || "text/plain", "X-Filename": encodeURIComponent(f.name) }, body: f });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      await refresh();
+      openProfile(accId);
+      toast(f.type === "application/pdf" ? "Guía PDF añadida" : "Guía añadida al texto");
+    } catch (err) {
+      toast(err.message, "error");
+      $("#guide-file-info").textContent = "";
+    }
+  });
+  $("#profile-sheet").addEventListener("click", (e) => {
+    const t = e.target.closest("button");
+    if (!t) return;
+    if (t.matches("[data-guide-remove]")) {
+      busy(t, async () => {
+        await api(`/accounts/${accId}/guide`, { method: "DELETE" });
+        await refresh();
+        openProfile(accId);
+      });
+    }
+    if (t.matches("[data-profile-suggest]")) {
+      busy(t, async () => {
+        const sug = await api(`/accounts/${accId}/profile/suggest`, { body: values() });
+        for (const [k, v] of Object.entries(sug)) if (form[k]) form[k].value = v;
+        toast("Revisa la propuesta y guarda");
+      });
+    }
+  });
+}
+
+// ------------------------------------------------------------------ Investigación
+const research = { images: [], count: 8, web: true, accountId: "", draft: {} };
+
+function researchView() {
+  const accs = state.data.accounts;
+  if (!accs.length) {
+    return `<div class="page-head"><div><h1 class="page-title">Investigación</h1></div></div>
+      <div class="card empty">${icon("flask")}<h3>Conecta una cuenta primero</h3><p>La investigación se hace para una cuenta concreta y su perfil de marca.</p><button class="btn btn-primary" data-go="accounts">Ir a Cuentas</button></div>`;
+  }
+  if (!accountById(research.accountId)) research.accountId = accs[0].id;
+  const acc = accountById(research.accountId);
+  const anyReader = accs.some((a) => a.canResearch);
+  const runs = state.data.research || [];
+  const hasAI = state.data.settings.hasAnthropic;
+  return `
+    <div class="page-head"><div>
+      <h1 class="page-title">Investigación</h1>
+      <p class="page-sub">Analiza lo que funciona en otras cuentas y en tu nicho, y conviértelo en contenido para cada marca.</p>
+    </div></div>
+
+    <form class="card research-form" id="research-form">
+      <div class="research-for">
+        <span class="muted small">Investigar para</span>
+        <div class="segmented">${accs.map((a) => `<button type="button" class="${a.id === acc.id ? "on" : ""}" data-res-account="${a.id}">@${esc(a.username)}</button>`).join("")}</div>
+        ${profileComplete(acc) ? `<span class="small" style="color:var(--green)">${icon("checkCircle", 'style="width:14px;height:14px;vertical-align:-2px"')} Perfil de marca listo</span>` : `<button type="button" class="btn btn-ghost small" data-profile="${acc.id}">${icon("warn", 'style="width:14px;height:14px"')} Completa su perfil de marca</button>`}
+      </div>
+      <div class="grid grid-2" style="gap:14px">
+        <div class="field" style="margin:0"><label for="res-refs">Cuentas de referencia</label>
+          <input class="input" id="res-refs" name="references" value="${esc(research.draft.references || "")}" placeholder="@cuenta1, @cuenta2 (hasta 5)">
+          <div class="hint"><span>Personas o empresas cuyo contenido te inspira o que compiten contigo.</span></div></div>
+        <div class="field" style="margin:0"><label for="res-tags">Hashtags a vigilar</label>
+          <input class="input" id="res-tags" name="hashtags" value="${esc(research.draft.hashtags || "")}" placeholder="#finanzaspersonales, #ahorro">
+          <div class="hint"><span>Para ver qué publicaciones están funcionando ahora en ese tema.</span></div></div>
+      </div>
+      <div class="field" style="margin-top:14px"><label for="res-ideas">Ideas, temas o lo que viste</label>
+        <textarea class="textarea" id="res-ideas" name="ideas" style="min-height:90px" placeholder="Ej.: Vi un reel que explicaba la regla 50/30/20 con billetes reales y tenía millones de vistas. Quiero algo así para Loxita, enfocado en jóvenes que empiezan a ahorrar.">${esc(research.draft.ideas || "")}</textarea></div>
+      <div class="field"><label for="res-links">Enlaces (posts, reels, vídeos, artículos)</label>
+        <textarea class="textarea" id="res-links" name="links" style="min-height:52px" placeholder="https://www.instagram.com/reel/…  https://www.tiktok.com/…  (uno por línea)">${esc(research.draft.links || "")}</textarea></div>
+      <div class="field"><label>Capturas de contenido viral (opcional)</label>
+        <label class="dropzone small-zone" id="res-zone">${icon("image")}<div><strong>Sube capturas</strong> del perfil o de los posts con sus vistas y likes</div>
+          <div class="muted small">La IA lee lo que se ve: números, ganchos, diseño</div>
+          <input type="file" id="res-file" accept="image/*" multiple hidden></label>
+        <div class="previews" id="res-previews">${research.images.map((f, i) => `<div class="preview"><img src="${f.preview}" alt=""><button type="button" data-res-remove="${i}">${icon("x")}</button></div>`).join("")}</div>
+      </div>
+      <div class="research-opts">
+        <label class="switch"><input type="checkbox" id="res-web" ${research.web ? "checked" : ""}><span></span> Buscar tendencias y referencias en internet</label>
+        <div style="display:flex;align-items:center;gap:8px"><span class="small muted">Ideas</span>
+          <div class="segmented">${[6, 8, 10].map((n) => `<button type="button" class="${research.count === n ? "on" : ""}" data-res-count="${n}">${n}</button>`).join("")}</div></div>
+        <button class="btn btn-primary btn-lg" type="submit" ${hasAI ? "" : "disabled"}>${icon("flask")}Investigar</button>
+      </div>
+      ${hasAI ? "" : `<div class="note note-warn" style="margin:12px 0 0">Para investigar necesitas tu API key de Anthropic en <a href="#settings" data-go="settings">Ajustes</a>.</div>`}
+      ${anyReader ? "" : `<div class="note note-info" style="margin:12px 0 0"><strong>Métricas reales:</strong> para leer likes y comentarios de otras cuentas y hashtags, Instagram exige una cuenta conectada con token de Facebook (empieza por EAA). Mientras tanto, sube capturas: la IA analiza los números que se ven.</div>`}
+    </form>
+
+    <div class="section-title">Investigaciones <span class="count">${runs.length}</span></div>
+    ${runs.length ? runs.map(researchRow).join("") : `<div class="card empty">${icon("bulb")}<h3>Aún no hay investigaciones</h3><p>Empieza con una cuenta de referencia o una idea.</p></div>`}`;
+}
+
+function researchRow(r) {
+  const acc = accountById(r.accountId);
+  const i = r.inputs;
+  const what = [...i.references.map((u) => "@" + u), ...i.hashtags.map((t) => "#" + t), i.ideas ? `“${i.ideas.slice(0, 60)}${i.ideas.length > 60 ? "…" : ""}”` : "", i.images.length ? `${i.images.length} capturas` : "", i.webSearch ? "internet" : ""].filter(Boolean).join(" · ");
+  const ideas = r.result?.ideas || [];
+  return `
+    <div class="card list-row research-row" data-research="${r.id}">
+      <div class="stat-icon" style="margin:0;background:var(--purple-soft);color:var(--purple)">${icon(r.status === "running" ? "clock" : "flask")}</div>
+      <div class="row-main">
+        <div class="row-title">Para @${esc(acc?.username || "—")}${r.parentId ? " · más ideas" : ""}</div>
+        <div class="row-sub">${esc(what) || "Tendencias en internet"}</div>
+        <div class="row-sub">${relative(r.createdAt)}</div>
+      </div>
+      ${r.status === "running" ? `<span class="small muted"><span class="spinner" style="width:14px;height:14px;vertical-align:-2px"></span> ${esc(r.step)}</span>`
+        : r.status === "error" ? `<span class="pill pill-failed">Error</span>`
+        : `<span class="pill pill-idea">${ideas.length} ideas</span>`}
+    </div>`;
+}
+
+let sheetResearchId = null;
+function openResearch(id) {
+  const r = (state.data.research || []).find((x) => x.id === id);
+  if (!r) return;
+  sheetResearchId = id;
+  openSheet(`<div class="sheet" id="research-sheet">${researchSheetHtml(r)}</div>`);
+  bindResearchSheet();
+}
+
+function researchSheetHtml(r) {
+  const acc = accountById(r.accountId);
+  const res = r.result;
+  const head = `<div class="sheet-head"><h2>Investigación para @${esc(acc?.username || "—")}</h2>
+    <div style="display:flex;gap:6px"><button class="btn btn-icon btn-danger" data-research-delete aria-label="Eliminar">${icon("trash")}</button><button class="btn btn-icon" data-close aria-label="Cerrar">${icon("x")}</button></div></div>`;
+  if (r.status === "running") return head + `<div class="sheet-body"><div class="empty"><span class="spinner" style="width:28px;height:28px"></span><h3 style="margin-top:14px">${esc(r.step)}</h3><p>Puedes cerrar esto: te aviso en Actividad cuando esté lista.</p></div></div>`;
+  if (r.status === "error") return head + `<div class="sheet-body"><div class="note note-error">${esc(r.error)}</div></div>`;
+  const refs = r.sources?.references || [];
+  const tags = r.sources?.hashtags || [];
+  const fitColor = (n) => (n >= 75 ? "var(--green)" : n >= 50 ? "var(--orange)" : "var(--red)");
+  const ideas = res.ideas.filter((i) => i.status !== "dismissed");
+  return head + `
+    <div class="sheet-body research-body">
+      ${(res.warnings || []).map((w) => `<div class="note note-warn">${esc(w)}</div>`).join("")}
+      <div class="panel"><h4>Conclusión</h4><p style="margin:0;font-size:15.5px">${esc(res.summary)}</p></div>
+
+      ${refs.length || tags.length ? `<div class="panel"><h4>Lo que más funciona en las referencias</h4>
+        ${refs.map((x) => x.error ? `<p class="small" style="margin:6px 0"><strong>@${esc(x.username)}</strong> <span class="muted">— ${esc(x.error)}</span></p>` : `
+          <p style="margin:6px 0 4px"><strong>@${esc(x.username)}</strong> <span class="muted small">${x.followers != null ? x.followers.toLocaleString("es") + " seguidores" : ""}</span></p>
+          ${topTable(x.top)}`).join("")}
+        ${tags.map((x) => x.error ? `<p class="small" style="margin:6px 0"><strong>#${esc(x.tag)}</strong> <span class="muted">— ${esc(x.error)}</span></p>` : `<p style="margin:10px 0 4px"><strong>#${esc(x.tag)}</strong></p>${topTable(x.top.slice(0, 5))}`).join("")}
+      </div>` : ""}
+
+      ${res.patterns.length ? `<div class="panel"><h4>Por qué funciona</h4><div class="patterns">${res.patterns.map((p) => `<div><strong>${esc(p.title)}</strong><p>${esc(p.detail)}</p>${p.evidence ? `<p class="small muted">${esc(p.evidence)}</p>` : ""}</div>`).join("")}</div></div>` : ""}
+
+      <div class="grid grid-2" style="gap:14px;margin-bottom:16px">
+        <div class="panel" style="margin:0"><h4>Tendencias que encajan</h4>
+          ${res.trends.length ? res.trends.map((t) => `<div class="trend"><div class="trend-head"><strong>${esc(t.topic)}</strong><span class="fit" style="--v:${t.fit};--c:${fitColor(t.fit)}"><i></i>${t.fit}</span></div><p class="small">${esc(t.why)}</p><p class="small"><strong>Cómo usarla:</strong> ${esc(t.angle)}</p></div>`).join("") : `<p class="small muted">Sin tendencias destacadas.</p>`}
+        </div>
+        <div class="panel" style="margin:0"><h4>Descartado para esta marca</h4>
+          ${res.discarded.length ? res.discarded.map((d) => `<div class="trend"><strong class="muted" style="text-decoration:line-through">${esc(d.topic)}</strong><p class="small">${esc(d.reason)}</p></div>`).join("") : `<p class="small muted">Nada descartado.</p>`}
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top:8px">Serie de contenido propuesta <span class="count">${ideas.length}</span></div>
+      <div class="ideas">${ideas.map((i) => ideaCard(r, i, fitColor)).join("")}</div>
+
+      <div class="panel" style="margin-top:20px"><h4>Traer más contenido similar</h4>
+        <textarea class="textarea" id="more-feedback" style="min-height:70px" placeholder="Ej.: Más ideas como el carrusel de errores comunes, en formato Reel y con tono más divertido."></textarea>
+        <button class="btn btn-primary" style="margin-top:10px" data-research-more>${icon("spark")}Generar más ideas</button>
+      </div>
+    </div>`;
+}
+
+function topTable(top) {
+  if (!top?.length) return `<p class="small muted">Sin publicaciones disponibles.</p>`;
+  return `<div class="table-wrap"><table class="table"><thead><tr><th>Formato</th><th>Publicación</th><th class="num">Likes</th><th class="num">Coment.</th><th class="num">× mediana</th></tr></thead><tbody>
+    ${top.slice(0, 6).map((m) => `<tr><td>${esc(m.format)}</td><td class="cap">${m.permalink ? `<a href="${esc(m.permalink)}" target="_blank" rel="noopener">${esc(m.caption.slice(0, 70) || "(sin texto)")}</a>` : esc(m.caption.slice(0, 70))}</td><td class="num">${m.likes ?? "—"}</td><td class="num">${m.comments ?? "—"}</td><td class="num"><strong>${m.timesMedian ?? "—"}</strong></td></tr>`).join("")}
+  </tbody></table></div>`;
+}
+
+function ideaCard(r, i, fitColor) {
+  const done = i.status === "drafted";
+  return `
+    <div class="idea ${done ? "done" : ""}">
+      <div class="idea-top"><span class="pill pill-idea">${esc(i.format)}</span><span class="small muted">${esc(i.goal)}</span><span class="fit" style="--v:${i.fit};--c:${fitColor(i.fit)}"><i></i>${i.fit}</span></div>
+      <h3>${esc(i.title)}</h3>
+      <p class="hook">“${esc(i.hook)}”</p>
+      <p class="small muted"><strong>Fórmula:</strong> ${esc(i.formula)}${i.inspiredBy ? ` · <em>${esc(i.inspiredBy)}</em>` : ""}</p>
+      <details><summary>Estructura, copy y diseño</summary>
+        <ol class="outline">${i.outline.map((o) => `<li>${esc(o)}</li>`).join("")}</ol>
+        <div class="quote">${esc(i.caption)}${i.hashtags.length ? "\n\n" + esc(i.hashtags.join(" ")) : ""}</div>
+        <p class="small"><strong>CTA:</strong> ${esc(i.cta)}</p>
+        <p class="small muted"><strong>Diseño:</strong> ${esc(i.designNotes)}</p>
+      </details>
+      <div class="idea-actions">
+        ${done ? `<button class="btn" data-open="${i.postId}">Ver en Artes</button>` : `
+          <button class="btn btn-ghost" data-idea-dismiss="${i.id}">Descartar</button>
+          <button class="btn btn-primary" data-idea-draft="${i.id}">${icon("plus")}Crear borrador</button>`}
+      </div>
+    </div>`;
+}
+
+function bindResearchSheet() {
+  const sheet = $("#research-sheet");
+  sheet.addEventListener("click", (e) => {
+    const t = e.target.closest("button");
+    if (!t) return;
+    const r = state.data.research.find((x) => x.id === sheetResearchId);
+    if (t.dataset.ideaDraft) {
+      busy(t, async () => {
+        await api(`/research/${r.id}/ideas/${t.dataset.ideaDraft}/draft`, { body: {} });
+        await refresh();
+        refreshResearchSheet(true);
+        rerenderView();
+        toast("Borrador creado en Artes → Ideas");
+      });
+    } else if (t.dataset.ideaDismiss) {
+      busy(t, async () => {
+        await api(`/research/${r.id}/ideas/${t.dataset.ideaDismiss}/dismiss`, { body: {} });
+        await refresh();
+        refreshResearchSheet(true);
+      });
+    } else if (t.matches("[data-research-delete]")) {
+      busy(t, async () => {
+        await api(`/research/${r.id}`, { method: "DELETE" });
+        closeSheet();
+        await refresh();
+        rerenderView();
+      });
+    } else if (t.matches("[data-research-more]")) {
+      busy(t, async () => {
+        const liked = r.result.ideas.filter((i) => i.status === "drafted").map((i) => `«${i.title}» (${i.format})`);
+        const feedback = [$("#more-feedback").value.trim(), liked.length ? `Ideas que el usuario eligió (trae más en esa línea): ${liked.join(", ")}` : "", `No repitas estas ideas: ${r.result.ideas.map((i) => i.title).join("; ")}`].filter(Boolean).join("\n");
+        const i = r.inputs;
+        const created = await api("/research", {
+          body: { accountId: r.accountId, parentId: r.id, references: i.references.join(","), hashtags: i.hashtags.join(","), links: i.links.join("\n"), ideas: i.ideas, images: i.images, webSearch: i.webSearch, count: i.count, feedback },
+        });
+        await refresh();
+        rerenderView();
+        openResearch(created.id);
+      });
+    }
+  });
+}
+
+function refreshResearchSheet(force) {
+  if (!sheetResearchId) return;
+  const sheet = $("#research-sheet");
+  const r = (state.data.research || []).find((x) => x.id === sheetResearchId);
+  if (!sheet || !r) return;
+  if (sheet.contains(document.activeElement) && document.activeElement.tagName === "TEXTAREA") return;
+  const html = researchSheetHtml(r);
+  if (force || sheet.dataset.status !== r.status || r.status === "running") {
+    const scroll = sheet.scrollTop;
+    sheet.innerHTML = html;
+    sheet.dataset.status = r.status;
+    sheet.scrollTop = scroll;
+  }
+}
+
+async function submitResearch(form) {
+  const btn = form.querySelector('[type="submit"]');
+  await busy(btn, async () => {
+    const images = [];
+    for (const f of research.images) images.push(await uploadOne(f, () => {}));
+    const r = await api("/research", {
+      body: {
+        accountId: research.accountId,
+        references: form.references.value,
+        hashtags: form.hashtags.value,
+        ideas: form.ideas.value,
+        links: form.links.value,
+        images,
+        webSearch: $("#res-web").checked,
+        count: research.count,
+      },
+    });
+    research.images = [];
+    research.draft = {};
+    await refresh();
+    rerenderView();
+    openResearch(r.id);
+  });
+}
+
+async function addResearchImages(list) {
+  const prev = upload.size;
+  upload.size = "original";
+  for (const f of [...list].slice(0, 10 - research.images.length)) {
+    try {
+      research.images.push(await prepareFile(f));
+    } catch (e) {
+      toast(e.message, "error");
+    }
+  }
+  upload.size = prev;
+  rerenderView();
 }
 
 // ------------------------------------------------------------------ Ajustes
@@ -610,6 +967,7 @@ function closeSheet() {
   $("#modal").innerHTML = "";
   document.body.style.overflow = "";
   sheetPostId = null;
+  sheetResearchId = null;
 }
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && $("#modal").innerHTML) closeSheet();
@@ -639,6 +997,7 @@ function openPost(id) {
           <div id="d-preview">${previewHtml(post)}</div>
           <div>
             <div id="d-notes">${notesHtml(post)}</div>
+            ${briefHtml(post)}
             <div class="grid grid-2" style="gap:12px">
               <div class="field"><label>Título interno</label><input class="input" id="d-title" value="${esc(post.title)}" ${locked ? "disabled" : ""}></div>
               <div class="field"><label>Cuenta</label>
@@ -670,6 +1029,15 @@ function previewHtml(post) {
   const m = post.media[Math.min(detailState.slide, post.media.length - 1)];
   const multi = post.media.length > 1;
   const caption = $("#d-caption")?.value ?? post.caption;
+  if (!m) {
+    const ratio = post.type === "REELS" ? "9 / 16" : "4 / 5";
+    return `
+    <div class="phone">
+      <div class="ig-head">${avatar(acc)}<span>${acc ? esc(acc.username) : "tu_cuenta"}</span></div>
+      <div class="ig-empty" style="aspect-ratio:${ratio}">${icon("image")}<strong>Aún sin arte</strong><span>${post.type === "REELS" ? "Reel 1080×1920" : "1080×1350"}${post.type === "CAROUSEL" ? ` · hasta ${CAROUSEL_MAX} diapositivas` : ""}</span></div>
+      <div class="ig-caption"><strong>${acc ? esc(acc.username) : "tu_cuenta"}</strong> ${esc(caption)}</div>
+    </div>`;
+  }
   return `
     <div class="phone">
       <div class="ig-head">${avatar(acc)}<span>${acc ? esc(acc.username) : "tu_cuenta"}</span></div>
@@ -686,6 +1054,10 @@ function previewHtml(post) {
 }
 
 function notesHtml(post) {
+  if (post.status === "idea")
+    return `<label class="dropzone small-zone" id="idea-zone">${icon("upload")}<div><strong>Sube el arte de esta idea</strong></div>
+      <div class="muted small">${post.type === "REELS" ? "Vídeo vertical 1080×1920" : post.type === "CAROUSEL" ? `Varias imágenes, 1080×1350, máximo ${CAROUSEL_MAX}` : "Imagen 1080×1350"} · se adapta sola a la medida</div>
+      <input type="file" id="idea-file" accept="image/*,video/mp4,video/quicktime" ${post.type === "CAROUSEL" ? "multiple" : ""} hidden></label>`;
   if (post.status === "rejected" && post.note) return `<div class="note note-error"><strong>Rechazado:</strong> ${esc(post.note)}</div>`;
   if (post.status === "failed") return `<div class="note note-error"><strong>No se pudo publicar.</strong> ${esc(post.error || "")}</div>`;
   if (post.status === "scheduled") return `<div class="note note-info">Se publicará automáticamente el <strong>${fmtDate(post.scheduledAt, { weekday: "long" })}</strong>.</div>`;
@@ -697,7 +1069,24 @@ function notesHtml(post) {
 
 function checksHtml(post) {
   const ic = { ok: "checkCircle", warn: "warn", error: "xCircle" };
-  return `<ul class="checks">${post.checks.map((c) => `<li class="${c.level}">${icon(ic[c.level])}<span>${esc(c.text)}</span></li>`).join("")}</ul>`;
+  const canAdapt = post.checks.some((c) => c.fix === "adapt") && post.media.some((m) => m.mime.startsWith("image/")) && !["publishing", "published"].includes(post.status);
+  return `<ul class="checks">${post.checks.map((c) => `<li class="${c.level}">${icon(ic[c.level])}<span>${esc(c.text)}</span></li>`).join("")}</ul>
+    ${canAdapt ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center">
+      <span class="small muted">Adaptar a la medida de Instagram:</span>
+      <button class="btn" data-adapt="contain">Ajustar sin recortar</button>
+      <button class="btn" data-adapt="cover">Recortar al centro</button></div>` : ""}`;
+}
+
+function briefHtml(post) {
+  const b = post.brief;
+  if (!b) return "";
+  return `<div class="panel"><h4><span>${icon("bulb", 'style="width:13px;height:13px;vertical-align:-2px"')} Brief de la idea</span><span class="pill pill-idea">${esc(b.format)}</span></h4>
+    ${b.hook ? `<p style="margin:0 0 8px"><strong>Gancho:</strong> ${esc(b.hook)}</p>` : ""}
+    ${b.outline?.length ? `<ol class="outline">${b.outline.map((o) => `<li>${esc(o)}</li>`).join("")}</ol>` : ""}
+    ${b.formula ? `<p class="small muted" style="margin:8px 0 0"><strong>Fórmula:</strong> ${esc(b.formula)}</p>` : ""}
+    ${b.cta ? `<p class="small muted" style="margin:4px 0 0"><strong>CTA:</strong> ${esc(b.cta)}</p>` : ""}
+    ${b.designNotes ? `<p class="small muted" style="margin:4px 0 0"><strong>Diseño:</strong> ${esc(b.designNotes)}</p>` : ""}
+  </div>`;
 }
 
 function aiHtml(post) {
@@ -726,6 +1115,7 @@ function aiHtml(post) {
 function actionsHtml(post) {
   const errors = post.checks.some((c) => c.level === "error");
   if (post.status === "published") return `<button class="btn" data-close>Cerrar</button>`;
+  if (post.status === "idea") return `<span class="muted small" style="margin-right:auto;align-self:center">Diseña el arte siguiendo el brief y súbelo arriba: pasará a revisión.</span><button class="btn" data-close>Cerrar</button>`;
   if (post.status === "publishing") return `<button class="btn" disabled><span class="spinner"></span> Publicando…</button>`;
   if (post.status === "scheduled") {
     return `<span class="muted small" style="margin-right:auto;align-self:center">${icon("clock", 'style="width:14px;height:14px;vertical-align:-2px"')} ${fmtDate(post.scheduledAt)}</span>
@@ -800,6 +1190,22 @@ function bindDetail(id) {
     $("#d-preview").innerHTML = previewHtml(postById(id));
   });
 
+  sheet.addEventListener("change", async (e) => {
+    if (e.target.id !== "idea-file" || !e.target.files.length) return;
+    const zone = $("#idea-zone");
+    zone.innerHTML = '<span class="spinner"></span> Subiendo…';
+    try {
+      const updated = await attachFiles(postById(id), e.target.files);
+      Object.assign(postById(id), updated);
+      await refresh();
+      openPost(id);
+      rerenderView();
+      toast("Arte subido: pasa a revisión");
+    } catch (err) {
+      toast(err.message, "error");
+      refreshDetail();
+    }
+  });
   sheet.addEventListener("click", (e) => {
     const t = e.target.closest("button");
     if (!t) return;
@@ -810,6 +1216,15 @@ function bindDetail(id) {
     } else if (t.dataset.mode) {
       detailState.mode = t.dataset.mode;
       $("#d-actions").innerHTML = actionsHtml(post);
+    } else if (t.dataset.adapt) {
+      busy(t, async () => {
+        Object.assign(post, await adaptPost(post, t.dataset.adapt));
+        detailState.slide = 0;
+        $("#d-preview").innerHTML = previewHtml(post);
+        refreshDetail();
+        rerenderView();
+        toast("Adaptado a la medida de Instagram");
+      });
     } else if (t.dataset.useSuggestion) {
       $("#d-caption").value = t.dataset.useSuggestion;
       $("#d-caption").dispatchEvent(new Event("input"));
@@ -876,7 +1291,29 @@ async function postAction(btn, post, action) {
 }
 
 // ------------------------------------------------------------------ nuevo arte
-const upload = { files: [] };
+// Medidas que acepta la API de Instagram. 3:4 (1080×1440/1450) se puede subir desde la app, pero no por API.
+const SIZES = {
+  portrait: { label: "Vertical", dims: "1080×1350", w: 1080, h: 1350 },
+  square: { label: "Cuadrado", dims: "1080×1080", w: 1080, h: 1080 },
+  landscape: { label: "Horizontal", dims: "1080×566", w: 1080, h: 566 },
+  original: { label: "Original", dims: "sin cambiar" },
+};
+const CAROUSEL_MAX = 10;
+const upload = { files: [], size: "portrait", fit: "contain" };
+
+function sizeControls() {
+  return `
+    <div class="field">
+      <label>Medida de publicación</label>
+      <div class="segmented" id="size-seg">${Object.entries(SIZES).map(([k, s]) => `<button type="button" class="${upload.size === k ? "on" : ""}" data-size="${k}">${s.label} <span class="muted">${s.dims}</span></button>`).join("")}</div>
+      ${upload.size !== "original" ? `
+      <div class="segmented" id="fit-seg" style="margin-top:8px">
+        <button type="button" class="${upload.fit === "contain" ? "on" : ""}" data-fit="contain">Ajustar sin recortar</button>
+        <button type="button" class="${upload.fit === "cover" ? "on" : ""}" data-fit="cover">Recortar al centro</button>
+      </div>` : ""}
+      <div class="hint"><span>Las imágenes se adaptan solas. «Ajustar» añade bordes del color del arte; «Recortar» llena el formato. Los vídeos no se modifican (Reels: 1080×1920).</span></div>
+    </div>`;
+}
 
 function openNewPost() {
   if (!state.data.accounts.length) {
@@ -892,10 +1329,11 @@ function openNewPost() {
           <label class="dropzone" id="dz">
             ${icon("upload")}
             <div><strong>Arrastra tus archivos</strong> o haz clic para elegir</div>
-            <div class="muted small">1 imagen = publicación · 2–10 = carrusel · 1 vídeo = Reel</div>
+            <div class="muted small">1 imagen = post · 2–${CAROUSEL_MAX} = carrusel · 1 vídeo = Reel</div>
             <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp,image/heic,video/mp4,video/quicktime" multiple hidden>
           </label>
           <div class="previews" id="previews"></div>
+          <div id="size-box">${sizeControls()}</div>
           <div class="field"><label>Cuenta</label>
             <select class="select" name="accountId">${state.data.accounts.map((a) => `<option value="${a.id}">@${esc(a.username)}${a.demo ? " (prueba)" : ""}</option>`).join("")}</select></div>
           <div class="field"><label>Título interno (opcional)</label><input class="input" name="title" placeholder="Ej.: Lanzamiento colección verano"></div>
@@ -908,9 +1346,28 @@ function openNewPost() {
         </div>
       </form>
     </div>`);
-  const dz = $("#dz");
-  const input = $("#file-input");
-  input.addEventListener("change", () => addFiles(input.files));
+  bindDropzone($("#dz"), $("#file-input"), addFiles);
+  $("#previews").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-remove]");
+    if (!b) return;
+    upload.files.splice(Number(b.dataset.remove), 1);
+    renderPreviews();
+  });
+  $("#size-box").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-size],[data-fit]");
+    if (!b) return;
+    if (b.dataset.size) upload.size = b.dataset.size;
+    if (b.dataset.fit) upload.fit = b.dataset.fit;
+    $("#size-box").innerHTML = sizeControls();
+    // Vuelve a preparar las imágenes con la nueva medida.
+    upload.files = await Promise.all(upload.files.map((f) => prepareFile(f.original)));
+    renderPreviews();
+  });
+  $("#new-form").addEventListener("submit", submitNewPost);
+}
+
+function bindDropzone(dz, input, onFiles) {
+  input.addEventListener("change", () => onFiles(input.files));
   dz.addEventListener("dragover", (e) => {
     e.preventDefault();
     dz.classList.add("drag");
@@ -919,21 +1376,14 @@ function openNewPost() {
   dz.addEventListener("drop", (e) => {
     e.preventDefault();
     dz.classList.remove("drag");
-    addFiles(e.dataTransfer.files);
+    onFiles(e.dataTransfer.files);
   });
-  $("#previews").addEventListener("click", (e) => {
-    const b = e.target.closest("[data-remove]");
-    if (!b) return;
-    upload.files.splice(Number(b.dataset.remove), 1);
-    renderPreviews();
-  });
-  $("#new-form").addEventListener("submit", submitNewPost);
 }
 
 async function addFiles(list) {
   for (const f of list) {
-    if (upload.files.length >= 10) {
-      toast("Máximo 10 archivos.");
+    if (upload.files.length >= CAROUSEL_MAX) {
+      toast(`Por API Instagram permite máximo ${CAROUSEL_MAX} archivos por carrusel.`);
       break;
     }
     try {
@@ -947,11 +1397,67 @@ async function addFiles(list) {
 
 function renderPreviews() {
   $("#previews").innerHTML = upload.files
-    .map((f, i) => `<div class="preview">${f.mime.startsWith("video/") ? `<video src="${f.preview}" muted></video>` : `<img src="${f.preview}" alt="">`}<button type="button" data-remove="${i}">${icon("x")}</button></div>`)
+    .map((f, i) => `<div class="preview">${f.mime.startsWith("video/") ? `<video src="${f.preview}" muted></video>` : `<img src="${f.preview}" alt="">`}<button type="button" data-remove="${i}">${icon("x")}</button><span class="dims">${f.width ? `${f.width}×${f.height}` : ""}</span></div>`)
     .join("");
 }
 
-// Prepara un archivo: mide dimensiones y convierte imágenes a JPEG (lo único que acepta Instagram).
+function loadImage(src, name = "imagen") {
+  return new Promise((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = () => reject(new Error(`${name}: no se pudo leer la imagen.`));
+    i.src = src;
+  });
+}
+
+// Color medio del borde de la imagen: se usa de fondo al ajustar sin recortar.
+function edgeColor(img) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 16;
+  const x = c.getContext("2d");
+  x.drawImage(img, 0, 0, 16, 16);
+  const d = x.getImageData(0, 0, 16, 16).data;
+  let r = 0, g = 0, b = 0, n = 0;
+  for (let y = 0; y < 16; y++) {
+    for (let xx = 0; xx < 16; xx++) {
+      if (y && y < 15 && xx && xx < 15) continue;
+      const i = (y * 16 + xx) * 4;
+      r += d[i]; g += d[i + 1]; b += d[i + 2]; n++;
+    }
+  }
+  return `rgb(${Math.round(r / n)},${Math.round(g / n)},${Math.round(b / n)})`;
+}
+
+// Dibuja la imagen en la medida exacta (o solo la convierte a JPEG si es «original»).
+async function renderJpeg(img, size, fit) {
+  const s = SIZES[size];
+  let w = img.naturalWidth, h = img.naturalHeight;
+  if (!s.w) {
+    const scale = Math.min(1, 2160 / w);
+    w = Math.round(w * scale);
+    h = Math.round(h * scale);
+  } else {
+    w = s.w;
+    h = s.h;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = s.w && fit === "contain" ? edgeColor(img) : "#fff";
+  ctx.fillRect(0, 0, w, h);
+  if (!s.w) {
+    ctx.drawImage(img, 0, 0, w, h);
+  } else {
+    const scale = (fit === "cover" ? Math.max : Math.min)(w / img.naturalWidth, h / img.naturalHeight);
+    const dw = img.naturalWidth * scale, dh = img.naturalHeight * scale;
+    ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
+  }
+  const blob = await new Promise((r) => canvas.toBlob(r, "image/jpeg", 0.92));
+  return { blob, width: w, height: h, preview: URL.createObjectURL(blob) };
+}
+
+// Prepara un archivo: mide, adapta a la medida elegida y convierte a JPEG (lo único que acepta Instagram).
 async function prepareFile(file) {
   if (file.type.startsWith("video/")) {
     const url = URL.createObjectURL(file);
@@ -962,33 +1468,42 @@ async function prepareFile(file) {
       v.onerror = () => resolve({});
       v.src = url;
     });
-    return { blob: file, mime: file.type === "video/quicktime" ? "video/quicktime" : "video/mp4", name: file.name, preview: url, ...meta };
+    return { original: file, blob: file, mime: file.type === "video/quicktime" ? "video/quicktime" : "video/mp4", name: file.name, preview: url, ...meta };
   }
   if (!file.type.startsWith("image/")) throw new Error(`${file.name}: formato no admitido.`);
-  const url = URL.createObjectURL(file);
-  const img = await new Promise((resolve, reject) => {
-    const i = new Image();
-    i.onload = () => resolve(i);
-    i.onerror = () => reject(new Error(`${file.name}: no se pudo leer la imagen.`));
-    i.src = url;
-  });
-  let blob = file;
-  let { naturalWidth: width, naturalHeight: height } = img;
-  // Convierte a JPEG si hace falta, o si la imagen es enorme (Instagram recomienda máx. 1440 px de ancho).
-  if (file.type !== "image/jpeg" || width > 2160 || file.size > 8 * 1024 * 1024) {
-    const scale = Math.min(1, 2160 / width);
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(width * scale);
-    canvas.height = Math.round(height * scale);
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#fff"; // fondo blanco para PNG con transparencia
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    blob = await new Promise((r) => canvas.toBlob(r, "image/jpeg", 0.92));
-    width = canvas.width;
-    height = canvas.height;
+  const img = await loadImage(URL.createObjectURL(file), file.name);
+  const untouched = upload.size === "original" && file.type === "image/jpeg" && img.naturalWidth <= 2160 && file.size <= 8 * 1024 * 1024;
+  if (untouched) return { original: file, blob: file, mime: "image/jpeg", name: file.name, preview: img.src, width: img.naturalWidth, height: img.naturalHeight };
+  const out = await renderJpeg(img, upload.size, upload.fit);
+  return { original: file, mime: "image/jpeg", name: file.name, ...out };
+}
+
+// Adapta los artes ya subidos de un arte a 1080×1350 (todas las diapositivas a la misma medida).
+async function adaptPost(post, fit) {
+  const first = post.media.find((m) => m.mime.startsWith("image/"));
+  const r = first?.width ? first.width / first.height : 0.8;
+  const size = post.type === "CAROUSEL" && Math.abs(r - 1) < 0.02 ? "square" : post.type === "CAROUSEL" && r > 1.5 ? "landscape" : "portrait";
+  const media = [];
+  for (const m of post.media) {
+    if (m.mime.startsWith("video/")) {
+      media.push(m);
+      continue;
+    }
+    const img = await loadImage(m.url, m.name);
+    const out = await renderJpeg(img, size, fit);
+    media.push(await uploadOne({ ...out, mime: "image/jpeg", name: m.name }, () => {}));
   }
-  return { blob, mime: "image/jpeg", name: file.name, preview: url, width, height };
+  return api("/posts/" + post.id, { method: "PATCH", body: { media } });
+}
+
+// Sube el arte de una idea (o reemplaza el de un arte en revisión).
+async function attachFiles(post, list) {
+  upload.size = post.type === "REELS" ? "original" : "portrait";
+  const prepared = [];
+  for (const f of [...list].slice(0, CAROUSEL_MAX)) prepared.push(await prepareFile(f));
+  const media = [];
+  for (const f of prepared) media.push(await uploadOne(f, () => {}));
+  return api("/posts/" + post.id, { method: "PATCH", body: { media } });
 }
 
 function uploadOne(f, onProgress) {
@@ -1035,7 +1550,7 @@ async function submitNewPost(e) {
 
 // ------------------------------------------------------------------ eventos globales
 document.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-go],[data-action],[data-open],[data-filter],[data-cal],[data-chip],[data-proposal-approve],[data-proposal-reject],[data-test-account],[data-remove-account],[data-close]");
+  const t = e.target.closest("[data-profile],[data-research],[data-res-account],[data-res-count],[data-res-remove],[data-go],[data-action],[data-open],[data-filter],[data-cal],[data-chip],[data-proposal-approve],[data-proposal-reject],[data-test-account],[data-remove-account],[data-close]");
   if (!t) return;
   if (t.matches("[data-close]")) return closeSheet();
   if (t.closest(".sheet") && !t.matches("[data-open],[data-go]")) return; // la hoja maneja sus propios botones
@@ -1045,6 +1560,20 @@ document.addEventListener("click", (e) => {
     return go(t.dataset.go);
   }
   if (t.dataset.open) return openPost(t.dataset.open);
+  if (t.dataset.profile) return openProfile(t.dataset.profile);
+  if (t.dataset.research) return openResearch(t.dataset.research);
+  if (t.dataset.resAccount) {
+    research.accountId = t.dataset.resAccount;
+    return rerenderView();
+  }
+  if (t.dataset.resCount) {
+    research.count = Number(t.dataset.resCount);
+    return rerenderView();
+  }
+  if (t.dataset.resRemove) {
+    research.images.splice(Number(t.dataset.resRemove), 1);
+    return rerenderView();
+  }
   if (t.dataset.filter) {
     state.filter = t.dataset.filter;
     return rerenderView();
@@ -1129,7 +1658,25 @@ function markProposal(id, status) {
   if (p) p.status = status;
 }
 
+document.addEventListener("dragover", (e) => {
+  if (e.target.closest?.("#res-zone")) e.preventDefault();
+});
+document.addEventListener("drop", (e) => {
+  if (!e.target.closest?.("#res-zone")) return;
+  e.preventDefault();
+  addResearchImages(e.dataTransfer.files);
+});
+
+document.addEventListener("change", (e) => {
+  if (e.target.id === "res-file") addResearchImages(e.target.files);
+  if (e.target.id === "res-web") research.web = e.target.checked;
+});
+
 document.addEventListener("submit", (e) => {
+  if (e.target.id === "research-form") {
+    e.preventDefault();
+    return submitResearch(e.target);
+  }
   if (e.target.id === "agent-form") {
     e.preventDefault();
     const ta = e.target.command;
@@ -1170,6 +1717,7 @@ document.addEventListener("keydown", (e) => {
   }
 });
 document.addEventListener("input", (e) => {
+  if (e.target.form?.id === "research-form" && e.target.name) research.draft[e.target.name] = e.target.value;
   if (e.target.matches?.("#agent-form textarea")) {
     e.target.style.height = "auto";
     e.target.style.height = e.target.scrollHeight + "px";
@@ -1188,6 +1736,7 @@ function startPolling() {
       if (JSON.stringify(state.data) !== before) {
         rerenderView();
         refreshDetail();
+        refreshResearchSheet();
       }
     } catch {
       // sin conexión momentánea: lo intentamos en el siguiente ciclo

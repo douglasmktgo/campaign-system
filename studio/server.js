@@ -5,7 +5,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import * as store from "./lib/store.js";
-import { MEDIA_DIR } from "./lib/store.js";
+import { MEDIA_DIR, GUIDES_DIR } from "./lib/store.js";
 import { validatePost, hasErrors } from "./lib/validate.js";
 import * as ig from "./lib/instagram.js";
 import * as agent from "./lib/agent.js";
@@ -140,7 +140,7 @@ function publicBase() {
 
 function publicAccount(a) {
   const { token, ...rest } = a;
-  return rest;
+  return { ...rest, canResearch: ig.canDiscover(a) };
 }
 
 app.get("/api/state", (_req, res) => {
@@ -149,6 +149,7 @@ app.get("/api/state", (_req, res) => {
     accounts: d.accounts.map(publicAccount),
     posts: d.posts,
     proposals: d.proposals.slice(0, 100),
+    research: d.research.slice(0, 30),
     activity: d.activity.slice(0, 40),
     settings: {
       hasAnthropic: Boolean(d.settings.anthropicKey || process.env.ANTHROPIC_API_KEY),
@@ -281,12 +282,25 @@ function cleanMedia(list) {
 
 // ---------------------------------------------------------------- artes
 
+// Perfil de marca de la cuenta (con la guía general de Ajustes como respaldo) y guía en PDF si la hay.
+function brandContext(accountId) {
+  const acc = findAccount(accountId);
+  const text = agent.profileText(acc?.profile);
+  return [text, db().settings.brandGuide ? "Guía general: " + db().settings.brandGuide : ""].filter(Boolean).join("\n");
+}
+function guideDoc(accountId) {
+  const g = findAccount(accountId)?.profile?.guideFile;
+  const file = g && path.join(GUIDES_DIR, g.file);
+  if (!file || !fs.existsSync(file)) return null;
+  return { type: "document", source: { type: "base64", media_type: "application/pdf", data: fs.readFileSync(file).toString("base64") }, title: "Guía de marca: " + g.name };
+}
+
 function runReview(post) {
   const key = anthropicKey();
   if (!key) return;
   post.aiReview = { pending: true };
   agent
-    .reviewPost(key, post, db().settings.brandGuide)
+    .reviewPost(key, post, brandContext(post.accountId), guideDoc(post.accountId))
     .then((review) => {
       post.aiReview = review;
       store.log(`IA revisó «${post.title}»: ${review.score}/100`, review.verdict === "listo" ? "success" : "info");
@@ -338,6 +352,13 @@ app.patch("/api/posts/:id", (req, res) => {
     post.caption = b.caption.slice(0, 5000);
     contentChanged = true;
   }
+  if (Array.isArray(b.media)) {
+    const media = cleanMedia(b.media);
+    if (!media.length) throw new HttpError(400, "Sube al menos un archivo válido.");
+    post.media = media;
+    post.type = media.length === 1 && media[0].mime.startsWith("video/") ? "REELS" : media.length > 1 ? "CAROUSEL" : "IMAGE";
+    contentChanged = true;
+  }
   if (typeof b.accountId === "string" && b.accountId !== post.accountId) {
     if (b.accountId && !findAccount(b.accountId)) throw new HttpError(400, "Cuenta no válida.");
     post.accountId = b.accountId;
@@ -350,7 +371,14 @@ app.patch("/api/posts/:id", (req, res) => {
     post.scheduledAt = null;
     history(post, "Editado: vuelve a revisión");
   }
+  // Una idea pasa a revisión en cuanto tiene su arte.
+  if (post.status === "idea" && post.media.length) {
+    post.status = "review";
+    history(post, "Arte subido: pasa a revisión");
+    store.log(`Nuevo arte para revisar: «${post.title}»`);
+  }
   store.save();
+  if (Array.isArray(b.media) && post.status === "review") runReview(post);
   res.json(post);
 });
 
@@ -488,6 +516,13 @@ async function tick() {
   }
 }
 
+for (const r of db().research) {
+  if (r.status === "running") {
+    r.status = "error";
+    r.error = "Se interrumpió porque el servidor se reinició. Vuelve a lanzarla.";
+  }
+}
+
 // Si el servidor se reinició a mitad de una publicación, no reintentamos a ciegas (evita duplicados).
 for (const p of db().posts) {
   if (p.status === "publishing") {
@@ -496,6 +531,224 @@ for (const p of db().posts) {
   }
 }
 store.save();
+
+// ---------------------------------------------------------------- perfil de marca
+
+app.put("/api/accounts/:id/profile", (req, res) => {
+  const acc = findAccount(req.params.id);
+  if (!acc) throw new HttpError(404, "Cuenta no encontrada.");
+  const b = req.body || {};
+  const profile = { ...(acc.profile || {}) };
+  for (const k of Object.keys(agent.PROFILE_FIELDS)) {
+    if (typeof b[k] === "string") profile[k] = b[k].slice(0, k === "guide" ? 20000 : 2000);
+  }
+  acc.profile = profile;
+  store.save();
+  res.json(publicAccount(acc));
+});
+
+// Guía de marca como archivo: PDF (la IA lo lee entero) o texto (.txt / .md, se añade a la guía).
+app.post("/api/accounts/:id/guide", express.raw({ type: () => true, limit: "20mb" }), (req, res) => {
+  const acc = findAccount(req.params.id);
+  if (!acc) throw new HttpError(404, "Cuenta no encontrada.");
+  const mime = String(req.headers["content-type"] || "").split(";")[0];
+  const name = decodeURIComponent(String(req.headers["x-filename"] || "guia")).slice(0, 120);
+  if (!req.body?.length) throw new HttpError(400, "El archivo está vacío.");
+  acc.profile = acc.profile || {};
+  if (mime === "application/pdf") {
+    if (acc.profile.guideFile) fs.rmSync(path.join(GUIDES_DIR, acc.profile.guideFile.file), { force: true });
+    const file = crypto.randomBytes(16).toString("hex") + ".pdf";
+    fs.writeFileSync(path.join(GUIDES_DIR, file), req.body);
+    acc.profile.guideFile = { file, name, size: req.body.length };
+  } else if (mime.startsWith("text/") || /\.(md|txt)$/i.test(name)) {
+    const text = req.body.toString("utf8").slice(0, 20000);
+    acc.profile.guide = [acc.profile.guide, `--- ${name} ---\n${text}`].filter(Boolean).join("\n\n").slice(0, 20000);
+  } else {
+    throw new HttpError(400, "Sube la guía en PDF, TXT o MD.");
+  }
+  store.log(`Guía de marca añadida a @${acc.username}: ${name}`);
+  store.save();
+  res.json(publicAccount(acc));
+});
+
+app.delete("/api/accounts/:id/guide", (req, res) => {
+  const acc = findAccount(req.params.id);
+  if (!acc?.profile?.guideFile) throw new HttpError(404, "No hay guía en PDF.");
+  fs.rmSync(path.join(GUIDES_DIR, acc.profile.guideFile.file), { force: true });
+  delete acc.profile.guideFile;
+  store.save();
+  res.json(publicAccount(acc));
+});
+
+async function safeOwnMedia(acc) {
+  try {
+    return await ig.ownMedia(acc);
+  } catch {
+    return null;
+  }
+}
+
+app.post("/api/accounts/:id/profile/suggest", wrap(async (req, res) => {
+  const acc = findAccount(req.params.id);
+  if (!acc) throw new HttpError(404, "Cuenta no encontrada.");
+  const current = { ...(acc.profile || {}), ...(req.body || {}) };
+  try {
+    res.json(await agent.suggestProfile(anthropicKey(), { account: acc, ownTop: await safeOwnMedia(acc), current }));
+  } catch (e) {
+    throw new HttpError(400, e.message);
+  }
+}));
+
+// ---------------------------------------------------------------- investigación
+
+const splitList = (v, re) => String(v || "").split(/[\s,;\n]+/).map((x) => x.trim()).filter((x) => re.test(x));
+
+app.post("/api/research", (req, res) => {
+  const b = req.body || {};
+  const acc = findAccount(b.accountId);
+  if (!acc) throw new HttpError(400, "Elige para qué cuenta es la investigación.");
+  if (!anthropicKey()) throw new HttpError(400, "Agrega tu API key de Anthropic en Ajustes para investigar.");
+  const inputs = {
+    references: [...new Set(splitList(b.references, /^@?[\w.]{2,30}$/).map((u) => u.replace(/^@/, "").toLowerCase()))].slice(0, 5),
+    hashtags: [...new Set(splitList(b.hashtags, /^#?[\p{L}\p{N}_]{2,}$/u).map((t) => t.replace(/^#/, "").toLowerCase()))].slice(0, 5),
+    links: splitList(b.links, /^https?:\/\/\S+$/).slice(0, 10),
+    ideas: String(b.ideas || "").slice(0, 5000),
+    images: cleanMedia(b.images).filter((m) => m.mime.startsWith("image/")).slice(0, 10),
+    webSearch: b.webSearch !== false,
+    count: Math.min(12, Math.max(3, Number(b.count) || 8)),
+    feedback: String(b.feedback || "").slice(0, 3000),
+  };
+  if (!inputs.references.length && !inputs.hashtags.length && !inputs.links.length && !inputs.ideas.trim() && !inputs.images.length && !inputs.webSearch) {
+    throw new HttpError(400, "Añade al menos una cuenta, idea, enlace, captura o activa la búsqueda en internet.");
+  }
+  const r = { id: store.id("res"), accountId: acc.id, parentId: b.parentId || null, inputs, status: "running", step: "Preparando…", createdAt: store.now(), result: null, sources: null, error: "" };
+  db().research.unshift(r);
+  db().research = db().research.slice(0, 60);
+  store.log(`Investigación iniciada para @${acc.username}`);
+  store.save();
+  runResearch(r);
+  res.json(r);
+});
+
+async function runResearch(r) {
+  const acc = findAccount(r.accountId);
+  const step = (text) => {
+    r.step = text;
+    store.save();
+  };
+  try {
+    // Cuenta con acceso a datos de otras cuentas: la propia si tiene token de Facebook, o cualquier otra conectada que lo tenga.
+    const reader = ig.canDiscover(acc) ? acc : db().accounts.find((a) => ig.canDiscover(a));
+    const noAccess = "para ver métricas de otras cuentas hace falta conectar una cuenta con token de Facebook (EAA…). Sube capturas de su perfil como alternativa.";
+    step("Analizando tu cuenta…");
+    const ownTop = await safeOwnMedia(acc);
+    const references = [];
+    for (const u of r.inputs.references) {
+      step(`Leyendo @${u}…`);
+      if (!reader) {
+        references.push({ username: u, error: noAccess });
+        continue;
+      }
+      try {
+        references.push(await ig.discoverProfile(reader, u));
+      } catch (e) {
+        references.push({ username: u, error: e.message.includes("does not exist") ? "no es una cuenta profesional o no existe" : e.message });
+      }
+    }
+    const hashtags = [];
+    for (const t of r.inputs.hashtags) {
+      step(`Revisando #${t}…`);
+      if (!reader) {
+        hashtags.push({ tag: t, error: noAccess });
+        continue;
+      }
+      try {
+        hashtags.push(await ig.hashtagTop(reader, t));
+      } catch (e) {
+        hashtags.push({ tag: t, error: e.message });
+      }
+    }
+    r.sources = { ownTop, references, hashtags };
+    step(r.inputs.webSearch ? "Investigando en internet y analizando el contenido… (1–3 min)" : "Analizando el contenido… (1–2 min)");
+    const images = r.inputs.images
+      .map((m) => path.join(MEDIA_DIR, m.file))
+      .filter((f) => fs.existsSync(f) && fs.statSync(f).size <= 5 * 1024 * 1024)
+      .map((f) => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: fs.readFileSync(f).toString("base64") } }));
+    const result = await agent.research(anthropicKey(), {
+      account: acc,
+      profile: { ...(acc.profile || {}), guide: [acc.profile?.guide, db().settings.brandGuide].filter(Boolean).join("\n\n") },
+      guideDoc: guideDoc(acc.id),
+      ownTop,
+      references,
+      hashtags,
+      ideas: r.inputs.ideas,
+      links: r.inputs.links,
+      images,
+      webSearch: r.inputs.webSearch,
+      feedback: r.inputs.feedback,
+      count: r.inputs.count,
+    });
+    result.ideas = result.ideas.map((i) => ({ ...i, id: store.id("idea"), status: "new" }));
+    r.result = result;
+    r.status = "done";
+    r.step = "";
+    store.log(`Investigación lista para @${acc.username}: ${result.ideas.length} ideas`, "success");
+  } catch (e) {
+    r.status = "error";
+    r.error = e.message;
+    store.log(`La investigación para @${acc?.username} falló: ${e.message}`, "error");
+  }
+  store.save();
+}
+
+function findIdea(req) {
+  const r = db().research.find((x) => x.id === req.params.id);
+  const idea = r?.result?.ideas.find((i) => i.id === req.params.ideaId);
+  if (!idea) throw new HttpError(404, "Esa idea ya no existe.");
+  return { r, idea };
+}
+
+// Convierte una idea en un borrador en Artes (estado "Idea") listo para diseñar y subir el arte.
+app.post("/api/research/:id/ideas/:ideaId/draft", (req, res) => {
+  const { r, idea } = findIdea(req);
+  const post = {
+    id: store.id("post"),
+    title: idea.title.slice(0, 80),
+    accountId: r.accountId,
+    type: idea.format === "REEL" ? "REELS" : idea.format === "CARRUSEL" ? "CAROUSEL" : "IMAGE",
+    media: [],
+    caption: [idea.caption, idea.hashtags.join(" ")].filter(Boolean).join("\n\n"),
+    status: "idea",
+    scheduledAt: null,
+    checks: [],
+    aiReview: null,
+    brief: { hook: idea.hook, outline: idea.outline, formula: idea.formula, cta: idea.cta, designNotes: idea.designNotes, format: idea.format, researchId: r.id },
+    history: [],
+    note: "",
+    createdAt: store.now(),
+  };
+  recheck(post);
+  history(post, "Creado desde Investigación");
+  db().posts.unshift(post);
+  idea.status = "drafted";
+  idea.postId = post.id;
+  store.log(`Idea convertida en borrador: «${post.title}»`);
+  store.save();
+  res.json(post);
+});
+
+app.post("/api/research/:id/ideas/:ideaId/dismiss", (req, res) => {
+  const { idea } = findIdea(req);
+  idea.status = "dismissed";
+  store.save();
+  res.json({ ok: true });
+});
+
+app.delete("/api/research/:id", (req, res) => {
+  db().research = db().research.filter((x) => x.id !== req.params.id);
+  store.save();
+  res.json({ ok: true });
+});
 
 // ---------------------------------------------------------------- agente
 

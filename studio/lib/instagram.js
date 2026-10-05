@@ -142,3 +142,60 @@ export async function publish(account, post, mediaUrls) {
   }
   return { mediaId: published.id, permalink };
 }
+
+// ---------------------------------------------------------------- investigación
+
+const MEDIA_FIELDS = "caption,like_count,comments_count,media_type,media_product_type,permalink,timestamp";
+
+// Resume una lista de publicaciones: ordena por interacción y marca cuántas veces supera la mediana.
+export function rankMedia(list) {
+  const items = (list || []).map((m) => ({
+    caption: (m.caption || "").slice(0, 600),
+    likes: m.like_count ?? null,
+    comments: m.comments_count ?? null,
+    format: m.media_product_type === "REELS" ? "REEL" : m.media_type === "CAROUSEL_ALBUM" ? "CARRUSEL" : m.media_type === "VIDEO" ? "VIDEO" : "POST",
+    permalink: m.permalink || "",
+    date: m.timestamp || "",
+    engagement: (m.like_count || 0) + 2 * (m.comments_count || 0),
+  }));
+  const sorted = [...items].map((x) => x.engagement).sort((a, b) => a - b);
+  const median = sorted.length ? sorted[Math.floor(sorted.length / 2)] || 1 : 1;
+  for (const x of items) x.timesMedian = Math.round((x.engagement / Math.max(median, 1)) * 10) / 10;
+  return { median, top: [...items].sort((a, b) => b.engagement - a.engagement).slice(0, 12), count: items.length };
+}
+
+// Publicaciones recientes de una cuenta conectada (funciona con los dos tipos de token).
+export async function ownMedia(account) {
+  if (account.demo) return null;
+  const data = await call(account.token, "GET", `${account.igUserId}/media`, { fields: MEDIA_FIELDS, limit: "50" });
+  return rankMedia(data.data);
+}
+
+export const canDiscover = (account) => !account.demo && account.token.startsWith("EAA");
+
+// Datos públicos de otra cuenta profesional (Business Discovery). Solo con token de Facebook (EAA…).
+export async function discoverProfile(account, username) {
+  const u = username.replace(/^@/, "").trim();
+  const data = await call(account.token, "GET", account.igUserId, {
+    fields: `business_discovery.username(${u}){username,name,biography,followers_count,media_count,media.limit(50){${MEDIA_FIELDS}}}`,
+  });
+  const bd = data.business_discovery || {};
+  return {
+    username: bd.username || u,
+    name: bd.name || "",
+    bio: bd.biography || "",
+    followers: bd.followers_count ?? null,
+    posts: bd.media_count ?? null,
+    ...rankMedia(bd.media?.data),
+  };
+}
+
+// Publicaciones más populares de un hashtag (límite de Instagram: 30 hashtags distintos cada 7 días).
+export async function hashtagTop(account, tag) {
+  const q = tag.replace(/^#/, "").trim();
+  const found = await call(account.token, "GET", "ig_hashtag_search", { user_id: account.igUserId, q });
+  const id = found.data?.[0]?.id;
+  if (!id) return { tag: q, top: [], count: 0, median: 0 };
+  const media = await call(account.token, "GET", `${id}/top_media`, { user_id: account.igUserId, fields: MEDIA_FIELDS, limit: "30" });
+  return { tag: q, ...rankMedia(media.data) };
+}

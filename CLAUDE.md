@@ -26,6 +26,24 @@ pasos de compilación dieron problemas, por eso las apps nuevas van **sin build*
 - Programador: `setInterval` cada 30 s en `server.js`. En el plan gratis de Render el servicio se duerme,
   así que las programaciones solo son fiables en plan de pago con Disk.
 
+- **Formatos:** la API de Instagram acepta imágenes de 4:5 a 1.91:1 y carruseles de máx. 10. 3:4 (1080×1440/1450)
+  NO se publica por API: la interfaz lo adapta a 1080×1350 (`adaptPost` / `renderJpeg` en `public/app.js`).
+- **Perfil de marca por cuenta** (`account.profile`, guía PDF en `DATA_DIR/guides`, privado). El agente lo usa
+  en revisión, propuestas e investigación. Cuentas del dueño: personal (diseñador gráfico) y **Loxita** (app de finanzas que inventó).
+- **Investigación** (`/api/research`, `agent.research`): Business Discovery + hashtag top media (solo token EAA),
+  publicaciones propias, capturas (visión), búsqueda web de Claude (`web_search_20260209`) y síntesis JSON con
+  ideas → borradores con estado `idea` y `brief`.
+- **Base de conocimiento** en `studio/lib/knowledge/` (de sergebulaev/instagram-skills, MIT) inyectada en los prompts.
+- **Demo sin servidor:** `python3 studio/demo/build.py salida.html` (simulador en `studio/demo/mock.js`;
+  mantenerlo al día cuando cambien las rutas). Publicada como artifact privado del dueño.
+
+## Skills de Claude Code instaladas
+
+`.claude/skills/ig-*` (de sergebulaev/instagram-skills, MIT): caption-writer, carousel-planner, hook-extractor,
+hashtag-strategist, humanizer, content-planner, repurposer, profile-optimizer, audience-insights. Sus guías
+compartidas están en `.claude/references/`. Mencionan Publora/Apify/Pixfaro (`lib/*.py`) que **no** están
+instalados: aquí se publica con Studio (API oficial), así que úsalas en modo borrador.
+
 ## Comandos
 
 ```bash
@@ -34,6 +52,8 @@ cd studio && npm test                   # pruebas de validación
 ```
 
 ## Ideas pendientes (no hechas aún)
+
+- Analizar vídeos/reels de referencia fotograma a fotograma (hoy: capturas + texto).
 
 - Renovación automática de tokens de Instagram (caducan a los 60 días).
 - Inicio de sesión con Instagram (OAuth) en vez de pegar el token.

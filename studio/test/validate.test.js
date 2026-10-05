@@ -45,3 +45,19 @@ test("reels: formato y duración", () => {
   assert.ok(hasErrors(validatePost(reel(video({ duration: 2 })))));
   assert.ok(hasErrors(validatePost(reel(video({ mime: "video/webm" })))));
 });
+
+test("1080×1450 (3:4) no se puede publicar por API y ofrece adaptarla", () => {
+  const checks = validatePost(post([img(1080, 1450)]));
+  const e = checks.find((c) => c.level === "error");
+  assert.ok(e && e.fix === "adapt" && e.text.includes("1080×1350"));
+});
+
+test("carrusel: avisa si las diapositivas tienen distinta proporción", () => {
+  const checks = validatePost(post([img(1080, 1350), img(1080, 1080)]));
+  assert.ok(checks.some((c) => c.level === "warn" && c.text.includes("proporción")));
+});
+
+test("carrusel de 10 sí, de 11 no", () => {
+  assert.ok(!hasErrors(validatePost(post(Array.from({ length: 10 }, () => img(1080, 1350))))));
+  assert.ok(hasErrors(validatePost(post(Array.from({ length: 11 }, () => img(1080, 1350))))));
+});

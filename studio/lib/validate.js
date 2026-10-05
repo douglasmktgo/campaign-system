@@ -1,29 +1,50 @@
 // Validación automática de un arte contra los requisitos de publicación de Instagram.
-// Devuelve una lista de comprobaciones { level: "ok" | "warn" | "error", text }.
+// Devuelve una lista de comprobaciones { level: "ok" | "warn" | "error", text, fix? }.
 // Un arte con algún "error" no se puede aprobar hasta corregirlo.
+// `fix: "adapt"` indica que la interfaz puede corregirlo sola (adaptar a la medida recomendada).
 
 const MB = 1024 * 1024;
+
+// Medidas que acepta la API de publicación de Instagram (la app permite algo más, la API no).
+export const FORMATS = {
+  portrait: { label: "Vertical 4:5", width: 1080, height: 1350 },
+  square: { label: "Cuadrado 1:1", width: 1080, height: 1080 },
+  landscape: { label: "Horizontal 1.91:1", width: 1080, height: 566 },
+  reel: { label: "Reel 9:16", width: 1080, height: 1920 },
+};
+// Por API el carrusel admite 10 archivos (la app de Instagram permite 20, pero no se pueden publicar así por API).
+export const CAROUSEL_MAX = 10;
+
+const MIN_RATIO = 0.8; // 4:5
+const MAX_RATIO = 1.91;
 
 function imageChecks(m, i, multi) {
   const label = multi ? `Imagen ${i + 1}: ` : "";
   const out = [];
   if (m.mime !== "image/jpeg") {
-    out.push({ level: "error", text: `${label}Instagram solo publica imágenes JPEG.` });
+    out.push({ level: "error", text: `${label}Instagram solo publica imágenes JPEG.`, fix: "adapt" });
   }
   if (m.size > 8 * MB) {
-    out.push({ level: "error", text: `${label}pesa ${(m.size / MB).toFixed(1)} MB; el máximo es 8 MB.` });
+    out.push({ level: "error", text: `${label}pesa ${(m.size / MB).toFixed(1)} MB; el máximo es 8 MB.`, fix: "adapt" });
   }
   if (m.width && m.height) {
     const ratio = m.width / m.height;
-    if (ratio < 0.8 - 0.01 || ratio > 1.91 + 0.01) {
+    const size = `${m.width}×${m.height}`;
+    if (ratio < MIN_RATIO - 0.01) {
+      const hint = ratio >= 0.72 ? " (formato 3:4, como 1080×1440 o 1080×1450)" : "";
       out.push({
         level: "error",
-        text: `${label}proporción ${ratio.toFixed(2)}:1 fuera de rango (de 4:5 a 1.91:1).`,
+        text: `${label}mide ${size}${hint}: es más alta de lo que permite Instagram por API (máximo vertical 4:5). Adáptala a 1080×1350.`,
+        fix: "adapt",
       });
+    } else if (ratio > MAX_RATIO + 0.01) {
+      out.push({ level: "error", text: `${label}mide ${size}: es más ancha de lo permitido (máximo 1.91:1, p. ej. 1080×566).`, fix: "adapt" });
     } else if (m.width < 1080) {
-      out.push({ level: "warn", text: `${label}${m.width}px de ancho; se recomienda 1080px para máxima nitidez.` });
+      out.push({ level: "warn", text: `${label}${size}; se recomienda 1080 px de ancho (vertical: 1080×1350).`, fix: "adapt" });
+    } else if (!multi && Math.abs(ratio - MIN_RATIO) > 0.01) {
+      out.push({ level: "warn", text: `${label}${size}. El formato vertical 1080×1350 ocupa más pantalla y suele rendir mejor.` });
     }
-    if (m.width < 320) out.push({ level: "error", text: `${label}demasiado pequeña (mínimo 320px de ancho).` });
+    if (m.width < 320) out.push({ level: "error", text: `${label}demasiado pequeña (mínimo 320 px de ancho).` });
   }
   return out;
 }
@@ -43,7 +64,7 @@ function videoChecks(m, i, multi) {
   if (m.width && m.height && !multi) {
     const ratio = m.width / m.height;
     if (Math.abs(ratio - 9 / 16) > 0.02) {
-      out.push({ level: "warn", text: `${label}los Reels se ven mejor en vertical 9:16 (1080×1920).` });
+      out.push({ level: "warn", text: `${label}mide ${m.width}×${m.height}. Los Reels se ven a pantalla completa en vertical 9:16 (1080×1920).` });
     }
   }
   return out;
@@ -54,9 +75,28 @@ export function validatePost(post) {
   const media = post.media || [];
 
   if (!post.accountId) checks.push({ level: "error", text: "Elige la cuenta de Instagram donde se publicará." });
-  if (!media.length) checks.push({ level: "error", text: "Sube al menos un archivo." });
-  if (post.type === "CAROUSEL" && (media.length < 2 || media.length > 10)) {
-    checks.push({ level: "error", text: "Un carrusel lleva entre 2 y 10 archivos." });
+  if (!media.length) checks.push({ level: "error", text: "Falta el arte: sube la imagen o el vídeo." });
+  if (post.type === "CAROUSEL") {
+    if (media.length < 2) checks.push({ level: "error", text: "Un carrusel lleva al menos 2 archivos." });
+    if (media.length > CAROUSEL_MAX) {
+      checks.push({
+        level: "error",
+        text: `Tiene ${media.length} archivos. Por API Instagram permite máximo ${CAROUSEL_MAX} por carrusel (los 20 de la app solo valen publicando a mano). Divídelo en dos carruseles.`,
+      });
+    }
+    // Instagram recorta todas las diapositivas a la proporción de la primera.
+    const first = media.find((m) => m.width && m.height);
+    if (first) {
+      const r0 = first.width / first.height;
+      const odd = media.map((m, i) => (m.width && m.height && Math.abs(m.width / m.height - r0) > 0.02 ? i + 1 : 0)).filter(Boolean);
+      if (odd.length) {
+        checks.push({
+          level: "warn",
+          text: `Las diapositivas ${odd.join(", ")} tienen otra proporción: Instagram las recortará a la de la primera (${first.width}×${first.height}). Usa la misma medida en todas.`,
+          fix: "adapt",
+        });
+      }
+    }
   }
 
   const multi = media.length > 1;

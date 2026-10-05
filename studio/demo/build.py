@@ -11,7 +11,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parent.parent
 css = (root / "public/styles.css").read_text()
 app = (root / "public/app.js").read_text()
-validate = (root / "lib/validate.js").read_text().replace("export function", "function")
+validate = (root / "lib/validate.js").read_text().replace("export function", "function").replace("export const", "const")
 mock = (root / "demo/mock.js").read_text().replace('"__VALIDATE__"', json.dumps(validate))
 
 # Tema en tres estados (sistema / claro / oscuro), como exige el visor de páginas.

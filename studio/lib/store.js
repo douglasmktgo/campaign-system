@@ -6,9 +6,11 @@ import crypto from "node:crypto";
 
 export const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
 export const MEDIA_DIR = path.join(DATA_DIR, "media");
+export const GUIDES_DIR = path.join(DATA_DIR, "guides"); // privado: no se sirve por web
 const DB_PATH = path.join(DATA_DIR, "db.json");
 
 fs.mkdirSync(MEDIA_DIR, { recursive: true });
+fs.mkdirSync(GUIDES_DIR, { recursive: true });
 
 const EMPTY = () => ({
   settings: {
@@ -21,6 +23,7 @@ const EMPTY = () => ({
   accounts: [],
   posts: [],
   proposals: [],
+  research: [],
   activity: [],
 });
 
