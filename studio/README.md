@@ -126,3 +126,14 @@ Error (con el motivo; se puede reintentar).
 - Si el servidor se reinicia a mitad de una publicación, no reintenta a ciegas (evita publicar dos veces).
 - El agente trata los copies y la guía de marca como datos, no como instrucciones, y solo puede proponer
   acciones sobre artes existentes.
+
+---
+
+## Demo interactiva (sin servidor)
+
+`studio/demo/` genera una versión de la interfaz que funciona sola en el navegador con datos de ejemplo
+(simula el servidor, la IA y la publicación). Sirve para enseñar la app sin desplegar nada:
+
+```bash
+python3 studio/demo/build.py studio-demo.html   # abre el archivo en el navegador
+```
