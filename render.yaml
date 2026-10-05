@@ -1,6 +1,7 @@
-# Blueprint de Render — versión MÍNIMA y robusta (carpeta simple/).
-# Sin base de datos, sin compilación: solo Express + fetch. Arranca en segundos.
+# Blueprint de Render.
 services:
+  # Versión MÍNIMA y robusta del sistema de campañas (carpeta simple/).
+  # Sin base de datos, sin compilación: solo Express + fetch. Arranca en segundos.
   - type: web
     name: campaign-system
     runtime: node
@@ -11,3 +12,22 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "20.18.0"
+
+  # Studio: artes para Instagram con validación, aprobaciones y agente (carpeta studio/).
+  # Para publicaciones programadas y datos persistentes usa plan Starter + Disk en /var/data
+  # y define DATA_DIR=/var/data (ver studio/README.md).
+  - type: web
+    name: campaign-studio
+    runtime: node
+    plan: free
+    rootDir: studio
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "20.18.0"
+      - key: APP_PASSWORD
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false

@@ -20,3 +20,6 @@ simple/node_modules/
 # Misc
 .DS_Store
 *.log
+
+# Datos locales de Studio (cuentas, tokens, artes subidos)
+studio/data/
