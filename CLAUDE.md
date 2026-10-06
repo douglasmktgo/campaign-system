@@ -34,6 +34,7 @@ pasos de compilación dieron problemas, por eso las apps nuevas van **sin build*
   publicaciones propias, capturas (visión), búsqueda web de Claude (`web_search_20260209`) y síntesis JSON con
   ideas → borradores con estado `idea` y `brief`.
 - **Base de conocimiento** en `studio/lib/knowledge/` (de sergebulaev/instagram-skills, MIT) inyectada en los prompts.
+- **Plan** (`db.plan`: `timezone`, `slots`, `reviews`, `summaries`; lógica en `lib/plan.js`): tarjetas por cuenta con `date`/`time` en la zona del plan (por defecto `America/Sao_Paulo`) y estados `proposed`, `approved`, `modified` (aprobada con cambios del usuario), `published`, `skipped`. «Crear borrador» crea un arte `idea` con `planSlotId` y `plannedAt`; al publicarse, la tarjeta pasa a `published`. El agente propone (`planPeriod`) y revisa (`replanWeek`); lo aprobado no lo toca sin propuesta. Plan de Loxita de octubre 2026 en `studio/seed/` (se carga con «Importar plan»).
 - **Demo sin servidor:** `python3 studio/demo/build.py salida.html` (simulador en `studio/demo/mock.js`;
   mantenerlo al día cuando cambien las rutas). Publicada como artifact privado del dueño.
 

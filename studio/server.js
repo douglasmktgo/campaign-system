@@ -9,6 +9,7 @@ import { MEDIA_DIR, GUIDES_DIR } from "./lib/store.js";
 import { validatePost, hasErrors } from "./lib/validate.js";
 import * as ig from "./lib/instagram.js";
 import * as agent from "./lib/agent.js";
+import * as plan from "./lib/plan.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -140,7 +141,7 @@ function publicBase() {
 
 function publicAccount(a) {
   const { token, ...rest } = a;
-  return { ...rest, canResearch: ig.canDiscover(a) };
+  return { ...rest, canResearch: ig.canDiscover(a), tokenKind: a.demo ? "demo" : token?.startsWith("EAA") ? "facebook" : "instagram" };
 }
 
 app.get("/api/state", (_req, res) => {
@@ -151,12 +152,14 @@ app.get("/api/state", (_req, res) => {
     proposals: d.proposals.slice(0, 100),
     research: d.research.slice(0, 30),
     activity: d.activity.slice(0, 40),
+    plan: d.plan,
     settings: {
       hasAnthropic: Boolean(d.settings.anthropicKey || process.env.ANTHROPIC_API_KEY),
       publicUrl: d.settings.publicUrl,
       effectivePublicUrl: publicBase(),
       brandGuide: d.settings.brandGuide,
       passwordFromEnv: Boolean(ENV_PASSWORD),
+      autoReview: d.settings.autoReview !== false,
     },
   });
 });
@@ -168,6 +171,9 @@ const anthropicKey = () => db().settings.anthropicKey || process.env.ANTHROPIC_A
 app.post("/api/accounts", wrap(async (req, res) => {
   const token = String(req.body?.token || "").trim();
   if (!token) throw new HttpError(400, "Pega el token de acceso.");
+  // Nunca mandar a Meta algo que no es un token de Meta (p. ej. una API key de Anthropic pegada aquí por error).
+  if (/^sk-ant-/i.test(token)) throw new HttpError(400, "Eso es una API key de Anthropic: pégala en Ajustes → Agente de IA, no aquí.");
+  if (!/^(EAA|IG)\w+$/.test(token)) throw new HttpError(400, "Eso no parece un token de Instagram. Empieza por EAA… (Facebook) o IG… (Instagram).");
   let found;
   try {
     found = await ig.discoverAccounts(token);
@@ -179,9 +185,10 @@ app.post("/api/accounts", wrap(async (req, res) => {
   for (const f of found) {
     const existing = d.accounts.find((a) => a.igUserId === f.igUserId);
     if (existing) {
-      Object.assign(existing, f, { token, status: "ok" });
+      Object.assign(existing, f, { token, status: "ok", statusMsg: "", tokenSetAt: store.now(), checkedAt: store.now() });
     } else {
-      d.accounts.push({ id: store.id("acc"), ...f, token, demo: false, status: "ok", connectedAt: store.now() });
+      d.accounts.push({ id: store.id("acc"), ...f, token, demo: false, status: "ok", connectedAt: store.now(), tokenSetAt: store.now(), checkedAt: store.now() });
+      adoptDemo(d.accounts[d.accounts.length - 1]);
     }
     added.push("@" + f.username);
   }
@@ -190,13 +197,26 @@ app.post("/api/accounts", wrap(async (req, res) => {
   res.json({ ok: true, added });
 }));
 
-app.post("/api/accounts/demo", (_req, res) => {
+// Si preparaste el plan con una cuenta de prueba llamada igual (p. ej. loxita.app), la cuenta real se queda con todo.
+function adoptDemo(real) {
+  const d = db();
+  const demo = d.accounts.find((a) => a.demo && a.username.toLowerCase() === real.username.toLowerCase());
+  if (!demo) return;
+  if (!real.profile && demo.profile) real.profile = demo.profile;
+  for (const s of d.plan.slots) if (s.accountId === demo.id) s.accountId = real.id;
+  for (const p of d.posts) if (p.accountId === demo.id && !["published", "publishing", "scheduled"].includes(p.status)) p.accountId = real.id;
+  for (const r of d.research) if (r.accountId === demo.id) r.accountId = real.id;
+  if (d.plan.summaries?.[demo.id]) d.plan.summaries[real.id] = d.plan.summaries[demo.id];
+  store.log(`@${real.username} hereda el plan y el perfil de la cuenta de prueba`);
+}
+
+app.post("/api/accounts/demo", (req, res) => {
   const d = db();
   const n = d.accounts.filter((a) => a.demo).length + 1;
   d.accounts.push({
     id: store.id("acc"),
     igUserId: "demo" + n,
-    username: n === 1 ? "tu.marca.demo" : `tu.marca.demo${n}`,
+    username: /^[\w.]{2,30}$/.test(req.body?.username || "") ? req.body.username.toLowerCase() : n === 1 ? "tu.marca.demo" : `tu.marca.demo${n}`,
     name: "Cuenta de prueba",
     avatar: "",
     followers: null,
@@ -496,6 +516,12 @@ async function publishPost(post) {
     post.permalink = result.permalink;
     post.mediaId = result.mediaId;
     history(post, account.demo ? "Publicado (simulado en cuenta de prueba)" : "Publicado en Instagram");
+    const slot = post.planSlotId && db().plan.slots.find((s) => s.id === post.planSlotId);
+    if (slot) {
+      slot.status = "published";
+      slot.publishedUrl = post.permalink || slot.publishedUrl;
+      slotHistory(slot, "Publicado desde Studio");
+    }
     store.log(`Publicado en @${account.username}: «${post.title}»`, "success");
     store.save();
   } catch (e) {
@@ -513,6 +539,64 @@ async function tick() {
     for (const post of due) await publishPost(post);
   } finally {
     ticking = false;
+  }
+}
+
+// Mantenimiento cada hora: comprueba que los tokens siguen valiendo (y renueva los de Instagram)
+// y, los lunes desde las 8:00 (zona del plan), deja preparada la revisión semanal de cada cuenta real.
+let maintaining = false;
+async function maintenance() {
+  if (maintaining) return;
+  maintaining = true;
+  try {
+    for (const acc of db().accounts.filter((a) => !a.demo && a.token)) {
+      const every = acc.status === "error" ? 3600e3 : 12 * 3600e3;
+      if (Date.now() - (Date.parse(acc.checkedAt) || 0) < every) continue;
+      acc.checkedAt = store.now();
+      if (ig.canRefresh(acc) && Date.now() - (Date.parse(acc.tokenSetAt || acc.connectedAt) || 0) > 7 * 86400e3) {
+        try {
+          acc.token = await ig.refreshToken(acc.token);
+          acc.tokenSetAt = store.now();
+        } catch {
+          // si no se pudo renovar, la comprobación de abajo dirá si el token sigue valiendo
+        }
+      }
+      try {
+        await ig.discoverAccounts(acc.token);
+        if (acc.status === "error") store.log(`@${acc.username} vuelve a funcionar`, "success");
+        acc.status = "ok";
+        acc.statusMsg = "";
+      } catch (e) {
+        if (acc.status !== "error") store.log(`@${acc.username} dejó de funcionar: ${e.message}`, "error");
+        acc.status = "error";
+        acc.statusMsg = e.message;
+      }
+    }
+    await autoWeeklyReview();
+    store.save();
+  } catch (e) {
+    console.error("mantenimiento:", e);
+  } finally {
+    maintaining = false;
+  }
+}
+
+async function autoWeeklyReview() {
+  const d = db();
+  if (d.settings.autoReview === false || !anthropicKey()) return;
+  const p = planData();
+  const today = plan.todayIn(p.timezone);
+  const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: p.timezone, hour: "2-digit", hourCycle: "h23" }).format(new Date()));
+  if (plan.weekStart(today) !== today || hour < 8) return;
+  for (const acc of d.accounts.filter((a) => !a.demo && a.status === "ok")) {
+    if (acc.autoReviewWeek === today || !p.slots.some((s) => s.accountId === acc.id)) continue;
+    if (p.reviews.some((r) => r.accountId === acc.id && r.weekStart === today)) continue;
+    acc.autoReviewWeek = today; // un solo intento por semana, aunque falle
+    try {
+      await runReplan(acc, today, "", true);
+    } catch (e) {
+      store.log(`No se pudo hacer la revisión automática de @${acc.username}: ${e.message}`, "error");
+    }
   }
 }
 
@@ -832,12 +916,342 @@ app.post("/api/proposals/:id/reject", (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------------------------------------------------------------- plan (mensual / semanal)
+
+const planData = () => db().plan;
+function findSlot(id) {
+  const s = planData().slots.find((x) => x.id === id);
+  if (!s) throw new HttpError(404, "Esa tarjeta del plan ya no existe.");
+  return s;
+}
+function slotHistory(s, text) {
+  s.history = [{ at: store.now(), text }, ...(s.history || [])].slice(0, 30);
+  s.updatedAt = store.now();
+}
+function newSlot(accountId, fields, extra = {}) {
+  return {
+    id: store.id("slot"),
+    accountId,
+    date: plan.todayIn(planData().timezone),
+    time: "19:00",
+    format: "REEL",
+    phase: "",
+    theme: "",
+    hook: "",
+    goal: "seguidores",
+    outline: [],
+    caption: "",
+    cta: "",
+    hashtags: [],
+    production: "",
+    notes: "",
+    why: "",
+    status: "proposed",
+    source: "manual",
+    postId: null,
+    publishedUrl: "",
+    metrics: {},
+    history: [],
+    createdAt: store.now(),
+    updatedAt: store.now(),
+    ...plan.cleanFields(fields),
+    ...extra,
+  };
+}
+const slotIso = (s) => plan.zonedIso(s.date, s.time, planData().timezone);
+
+// Contexto que el agente necesita para planificar una cuenta.
+function planAgentInput(acc, extra) {
+  const slots = planData().slots.filter((s) => s.accountId === acc.id).sort(plan.sortSlots);
+  const ideas = db().research
+    .filter((r) => r.accountId === acc.id && r.result)
+    .flatMap((r) => r.result.ideas.filter((i) => i.status === "new" && i.fit >= 70).map((i) => ({ titulo: i.title, formato: i.format, gancho: i.hook, objetivo: i.goal, inspirada: i.inspiredBy })))
+    .slice(0, 12);
+  return {
+    account: acc,
+    profile: { ...(acc.profile || {}), guide: [acc.profile?.guide, db().settings.brandGuide].filter(Boolean).join("\n\n") },
+    guideDoc: guideDoc(acc.id),
+    published: slots.filter((s) => s.status === "published").map(plan.slotForAgent),
+    planned: slots.filter((s) => !["published", "skipped"].includes(s.status)).map(plan.slotForAgent),
+    ideas,
+    nowDate: plan.todayIn(planData().timezone),
+    tz: planData().timezone,
+    ...extra,
+  };
+}
+
+app.post("/api/plan/slots", (req, res) => {
+  const b = req.body || {};
+  const acc = findAccount(b.accountId);
+  if (!acc) throw new HttpError(400, "Elige la cuenta.");
+  const published = b.status === "published";
+  const s = newSlot(acc.id, b, {
+    status: published ? "published" : "approved",
+    publishedUrl: published ? String(b.publishedUrl || "").slice(0, 300) : "",
+    metrics: published ? plan.cleanMetrics(b.metrics) : {},
+  });
+  slotHistory(s, published ? "Registrado como ya publicado" : "Creada por ti");
+  planData().slots.push(s);
+  store.save();
+  res.json(s);
+});
+
+app.patch("/api/plan/slots/:id", (req, res) => {
+  const s = findSlot(req.params.id);
+  const b = req.body || {};
+  const fields = plan.cleanFields(b);
+  const changed = Object.keys(fields).filter((k) => JSON.stringify(fields[k]) !== JSON.stringify(s[k]));
+  Object.assign(s, fields);
+  if (b.metrics) s.metrics = { ...(s.metrics || {}), ...plan.cleanMetrics(b.metrics) };
+  if (typeof b.publishedUrl === "string") s.publishedUrl = b.publishedUrl.slice(0, 300);
+  if (changed.length && ["proposed", "approved"].includes(s.status)) s.status = "modified";
+  if (changed.length) slotHistory(s, "Modificada por ti: " + changed.join(", "));
+  // Si ya hay borrador, la hora prevista viaja con la tarjeta.
+  const post = s.postId && db().posts.find((p) => p.id === s.postId);
+  if (post && (fields.date || fields.time)) post.plannedAt = slotIso(s);
+  store.save();
+  res.json(s);
+});
+
+app.post("/api/plan/slots/:id/status", (req, res) => {
+  const s = findSlot(req.params.id);
+  const status = String(req.body?.status || "");
+  if (!["approved", "proposed", "skipped", "published"].includes(status)) throw new HttpError(400, "Estado no válido.");
+  s.status = status;
+  if (status === "published") {
+    s.publishedUrl = String(req.body?.publishedUrl || s.publishedUrl || "").slice(0, 300);
+    s.metrics = { ...(s.metrics || {}), ...plan.cleanMetrics(req.body?.metrics) };
+  }
+  slotHistory(s, { approved: "Aprobada por ti", proposed: "Vuelve a propuesta", skipped: "Descartada", published: "Marcada como publicada" }[status]);
+  store.save();
+  res.json(s);
+});
+
+// Aprobar varias de una vez (p. ej. todas las propuestas de la semana).
+app.post("/api/plan/approve", (req, res) => {
+  const ids = new Set(Array.isArray(req.body?.ids) ? req.body.ids : []);
+  let n = 0;
+  for (const s of planData().slots) {
+    if (ids.has(s.id) && s.status === "proposed") {
+      s.status = "approved";
+      slotHistory(s, "Aprobada por ti");
+      n++;
+    }
+  }
+  if (n) store.log(`Plan: ${n} ${n === 1 ? "tarjeta aprobada" : "tarjetas aprobadas"}`, "success");
+  store.save();
+  res.json({ ok: true, approved: n });
+});
+
+app.delete("/api/plan/slots/:id", (req, res) => {
+  const s = findSlot(req.params.id);
+  planData().slots = planData().slots.filter((x) => x.id !== s.id);
+  store.save();
+  res.json({ ok: true });
+});
+
+// Tarjeta → borrador en Artes (estado Idea) con su brief. Al aprobar el arte se propone su hora.
+app.post("/api/plan/slots/:id/draft", (req, res) => {
+  const s = findSlot(req.params.id);
+  const existing = s.postId && db().posts.find((p) => p.id === s.postId);
+  if (existing) return res.json(existing);
+  if (s.format === "STORIES") throw new HttpError(400, "Las stories no se publican por Studio todavía: úsala como guion.");
+  const post = {
+    id: store.id("post"),
+    title: (s.theme || s.hook || "Pieza del plan").slice(0, 80),
+    accountId: s.accountId,
+    type: s.format === "REEL" ? "REELS" : s.format === "CARRUSEL" ? "CAROUSEL" : "IMAGE",
+    media: [],
+    caption: [s.caption, s.hashtags.join(" ")].filter(Boolean).join("\n\n"),
+    status: "idea",
+    scheduledAt: null,
+    plannedAt: slotIso(s),
+    planSlotId: s.id,
+    checks: [],
+    aiReview: null,
+    brief: { hook: s.hook, outline: s.outline, formula: s.why, cta: s.cta, designNotes: s.production, format: s.format },
+    history: [],
+    note: "",
+    createdAt: store.now(),
+  };
+  recheck(post);
+  history(post, "Creado desde el Plan");
+  db().posts.unshift(post);
+  s.postId = post.id;
+  if (s.status === "proposed") s.status = "approved";
+  slotHistory(s, "Borrador creado en Artes");
+  store.log(`Plan → borrador: «${post.title}»`);
+  store.save();
+  res.json(post);
+});
+
+// El agente propone el plan de un periodo. Las propuestas sin aprobar del periodo se sustituyen;
+// lo aprobado, modificado y publicado se respeta.
+app.post("/api/plan/generate", wrap(async (req, res) => {
+  const b = req.body || {};
+  const acc = findAccount(b.accountId);
+  if (!acc) throw new HttpError(400, "Elige la cuenta.");
+  if (!plan.isDate(b.from) || !plan.isDate(b.to) || b.to < b.from) throw new HttpError(400, "Elige un periodo válido.");
+  if (plan.addDays(b.from, 62) < b.to) throw new HttpError(400, "Planifica como máximo dos meses de una vez.");
+  let r;
+  try {
+    r = await agent.planPeriod(anthropicKey(), planAgentInput(acc, { from: b.from, to: b.to, instructions: String(b.instructions || "").slice(0, 4000) }));
+  } catch (e) {
+    throw new HttpError(400, e.message);
+  }
+  const p = planData();
+  p.slots = p.slots.filter((s) => !(s.accountId === acc.id && s.status === "proposed" && s.date >= b.from && s.date <= b.to));
+  const created = r.slots.map((x) => {
+    const s = newSlot(acc.id, x, { source: "agent" });
+    slotHistory(s, "Propuesta por el agente");
+    return s;
+  });
+  p.slots.push(...created);
+  p.summaries = { ...(p.summaries || {}), [acc.id]: { text: r.summary, from: b.from, to: b.to, at: store.now() } };
+  store.log(`El agente propone ${created.length} piezas para @${acc.username}`, "success");
+  store.save();
+  res.json({ summary: r.summary, created: created.length });
+}));
+
+// Revisión semanal: el agente mira lo publicado y propone cambios que apruebas uno a uno.
+app.post("/api/plan/replan", wrap(async (req, res) => {
+  const b = req.body || {};
+  const acc = findAccount(b.accountId);
+  if (!acc) throw new HttpError(400, "Elige la cuenta.");
+  const ws = plan.weekStart(plan.isDate(b.weekStart) ? b.weekStart : plan.todayIn(planData().timezone));
+  try {
+    res.json(await runReplan(acc, ws, String(b.instructions || "").slice(0, 4000)));
+  } catch (e) {
+    throw new HttpError(400, e.message);
+  }
+}));
+
+async function runReplan(acc, ws, instructions, auto = false) {
+  const r = await agent.replanWeek(anthropicKey(), planAgentInput(acc, { weekStart: ws, instructions }));
+  const review = {
+    id: store.id("rev"),
+    accountId: acc.id,
+    weekStart: ws,
+    summary: r.summary,
+    learnings: r.learnings.slice(0, 8),
+    changes: r.changes.map((c) => ({ id: store.id("chg"), kind: c.kind, slotId: c.slotId || null, fields: plan.cleanFields(c.fields), reason: c.reason, status: "pending" })),
+    createdAt: store.now(),
+    auto,
+  };
+  planData().reviews.unshift(review);
+  planData().reviews = planData().reviews.slice(0, 30);
+  store.log(`Revisión semanal${auto ? " automática" : ""} lista para @${acc.username}: ${review.changes.length} cambios propuestos`);
+  store.save();
+  return review;
+}
+
+app.post("/api/plan/reviews/:id/changes/:changeId", (req, res) => {
+  const review = planData().reviews.find((r) => r.id === req.params.id);
+  const c = review?.changes.find((x) => x.id === req.params.changeId);
+  if (!c || c.status !== "pending") throw new HttpError(404, "Ese cambio ya no está pendiente.");
+  if (req.body?.decision !== "apply") {
+    c.status = "rejected";
+    store.save();
+    return res.json(review);
+  }
+  if (c.kind === "add") {
+    const s = newSlot(review.accountId, c.fields, { source: "agent", status: "approved" });
+    slotHistory(s, "Añadida en la revisión semanal (aprobada por ti)");
+    planData().slots.push(s);
+  } else {
+    const s = planData().slots.find((x) => x.id === c.slotId);
+    if (!s || s.status === "published") {
+      c.status = "failed";
+      store.save();
+      throw new HttpError(400, "Esa tarjeta ya no se puede cambiar.");
+    }
+    if (c.kind === "remove") {
+      s.status = "skipped";
+      slotHistory(s, "Descartada en la revisión semanal: " + c.reason);
+    } else {
+      Object.assign(s, c.fields);
+      s.status = "approved";
+      slotHistory(s, "Ajustada en la revisión semanal: " + c.reason);
+    }
+  }
+  c.status = "applied";
+  store.save();
+  res.json(review);
+});
+
+app.put("/api/plan/settings", (req, res) => {
+  const tz = String(req.body?.timezone || "");
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: tz });
+  } catch {
+    throw new HttpError(400, "Zona horaria no válida.");
+  }
+  planData().timezone = tz;
+  store.save();
+  res.json({ ok: true });
+});
+
+// Exportar / importar el plan de una cuenta (para pasarlo de tu PC a Render o hacer copia).
+app.get("/api/plan/export", (req, res) => {
+  const acc = findAccount(String(req.query.accountId || ""));
+  if (!acc) throw new HttpError(400, "Elige la cuenta.");
+  res.setHeader("Content-Disposition", `attachment; filename="plan-${acc.username}.json"`);
+  res.json({
+    kind: "studio-plan",
+    version: 1,
+    username: acc.username,
+    timezone: planData().timezone,
+    profile: acc.profile || {},
+    summary: planData().summaries?.[acc.id] || null,
+    slots: planData().slots.filter((s) => s.accountId === acc.id).map(({ accountId, postId, ...s }) => s),
+  });
+});
+
+app.post("/api/plan/import", express.json({ limit: "5mb" }), (req, res) => {
+  const { accountId, data, replace, includeProfile } = req.body || {};
+  const acc = findAccount(accountId);
+  if (!acc) throw new HttpError(400, "Elige la cuenta.");
+  if (data?.kind !== "studio-plan" || !Array.isArray(data.slots)) throw new HttpError(400, "Ese archivo no es un plan de Studio.");
+  const p = planData();
+  if (replace) p.slots = p.slots.filter((s) => s.accountId !== acc.id || s.postId);
+  const known = new Set(p.slots.map((s) => s.id));
+  let n = 0;
+  for (const x of data.slots.slice(0, 400)) {
+    if (known.has(x.id)) continue;
+    const status = plan.SLOT_STATUS.includes(x.status) ? x.status : "proposed";
+    const s = newSlot(acc.id, x, {
+      status,
+      source: ["agent", "manual", "seed"].includes(x.source) ? x.source : "manual",
+      publishedUrl: String(x.publishedUrl || "").slice(0, 300),
+      metrics: plan.cleanMetrics(x.metrics),
+      history: Array.isArray(x.history) ? x.history.slice(0, 30) : [],
+    });
+    if (/^slot_[a-f0-9]{12}$/.test(x.id || "")) s.id = x.id;
+    p.slots.push(s);
+    n++;
+  }
+  if (data.summary?.text) p.summaries = { ...(p.summaries || {}), [acc.id]: data.summary };
+  if (includeProfile && data.profile && typeof data.profile === "object") {
+    const profile = { ...(acc.profile || {}) };
+    for (const k of Object.keys(agent.PROFILE_FIELDS)) if (typeof data.profile[k] === "string") profile[k] = data.profile[k].slice(0, k === "guide" ? 20000 : 2000);
+    acc.profile = profile;
+  }
+  store.log(`Plan importado en @${acc.username}: ${n} tarjetas`, "success");
+  store.save();
+  res.json({ ok: true, imported: n });
+});
+
 // ---------------------------------------------------------------- ajustes
 
 app.post("/api/settings", (req, res) => {
   const s = db().settings;
   const b = req.body || {};
-  if (typeof b.anthropicKey === "string" && b.anthropicKey.trim()) s.anthropicKey = b.anthropicKey.trim();
+  if (typeof b.anthropicKey === "string" && b.anthropicKey.trim()) {
+    const key = b.anthropicKey.trim();
+    if (!/^sk-ant-/.test(key)) throw new HttpError(400, "La API key de Anthropic empieza por sk-ant-… (los tokens de Instagram van en Cuentas).");
+    s.anthropicKey = key;
+  }
+  if (typeof b.autoReview === "boolean") s.autoReview = b.autoReview;
   if (b.removeAnthropicKey) s.anthropicKey = "";
   if (typeof b.publicUrl === "string") {
     const url = b.publicUrl.trim().replace(/\/$/, "");
@@ -880,6 +1294,8 @@ const PORT = Number(process.env.PORT) || 4100;
 if (process.env.NODE_ENV !== "test") {
   app.listen(PORT, () => console.log(`Studio listo en http://localhost:${PORT}`));
   setInterval(tick, 30 * 1000);
+  setInterval(maintenance, 3600 * 1000);
+  setTimeout(maintenance, 60 * 1000);
 }
 
 export { app, tick };

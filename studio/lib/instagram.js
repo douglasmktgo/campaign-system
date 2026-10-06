@@ -44,12 +44,17 @@ export async function discoverAccounts(token) {
   token = token.trim();
   if (token.startsWith("EAA")) {
     const pages = await call(token, "GET", "me/accounts", {
-      fields: "instagram_business_account{id,username,name,profile_picture_url,followers_count}",
+      fields: "name,instagram_business_account{id,username,name,profile_picture_url,followers_count}",
     });
     const found = (pages.data || []).map((p) => p.instagram_business_account).filter(Boolean);
     if (!found.length) {
+      const names = (pages.data || []).map((p) => p.name).filter(Boolean);
       throw new InstagramError(
-        "El token no tiene cuentas de Instagram profesionales vinculadas a una página de Facebook."
+        names.length
+          ? `El token ve tus páginas (${names.join(", ")}), pero ninguna tiene una cuenta de Instagram profesional vinculada. ` +
+              "Vincúlala en Meta Business Suite → Configuración → Perfiles → tu página → Conectar Instagram, " +
+              "y vuelve a generar el token marcando también la cuenta de Instagram."
+          : "El token no ve ninguna página de Facebook. Al generarlo, marca tu página y tu cuenta de Instagram."
       );
     }
     return found.map((a) => ({
@@ -75,6 +80,20 @@ export async function discoverAccounts(token) {
       followers: me.followers_count ?? null,
     },
   ];
+}
+
+// Los tokens de Instagram (IG…) de larga duración se pueden renovar sin la clave secreta de la app;
+// los de Facebook (EAA…) no: hay que generar uno nuevo antes de que caduquen (60 días).
+export const canRefresh = (account) => Boolean(account.token) && !account.token.startsWith("EAA");
+
+export async function refreshToken(token) {
+  const url = new URL("https://graph.instagram.com/refresh_access_token");
+  url.searchParams.set("grant_type", "ig_refresh_token");
+  url.searchParams.set("access_token", token);
+  const res = await fetch(url);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.access_token) throw new InstagramError(data.error?.message || "No se pudo renovar el token de Instagram.");
+  return data.access_token;
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

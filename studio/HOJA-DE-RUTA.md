@@ -40,7 +40,13 @@ y **qué hace falta**. Al terminar un bloque, márcalo y muévelo a «Hecho».
 
 ---
 
-## 2. Planificador mensual y semanal con días y horas óptimas
+## 2. Planificador mensual y semanal con días y horas óptimas — ✅ primera versión hecha (6/10/2026)
+
+> **Hecho (6/10, segunda tanda):** revisión semanal automática los lunes a las 8:00 (interruptor en Ajustes), comprobación de los tokens cada 12 h con aviso en Inicio (y 10 días antes de que caduque un token de Facebook), renovación automática de los tokens `IG…`, validación del token/API key pegados en el sitio equivocado y mensajes claros para los errores de Meta y Anthropic.
+>
+> **Hecho:** sección **Plan** (semana, mes y lista por cuenta), tarjetas editables con estados *Propuesta → Aprobada / Modificada → Publicada* (o *Descartada*), «Crear borrador» (la hora de la tarjeta se propone al aprobar el arte y, al publicarse, la tarjeta pasa sola a *Publicada*), registro de lo ya publicado con números a mano, «Proponer con IA» (`agent.planPeriod`), «Revisión semanal» con cambios que se aplican uno a uno (`agent.replanWeek`), horarios y calendario de referencia de Brasil (`lib/knowledge/horarios-brasil.md`), «Hoy en el plan» en Inicio, exportar/importar el plan en JSON y herencia del plan al conectar la cuenta real con el mismo usuario que una de prueba.
+>
+> **Falta:** leer las métricas solas con la API (`instagram_manage_insights`: `online_followers` y métricas por publicación) en vez de apuntarlas a mano; avisos por WhatsApp (bloque 1); añadir las rutas del plan al simulador de `studio/demo/mock.js`.
 
 **Qué quiere el dueño**
 - Que el sistema **planifique el mes** de cada cuenta (personal y Loxita), dividido por semanas.
@@ -85,5 +91,6 @@ y **qué hace falta**. Al terminar un bloque, márcalo y muévelo a «Hecho».
 - Varios usuarios y roles (diseñador sube, cliente aprueba).
 
 ## Hecho
+- Planificador (bloque 2, primera versión): sección Plan, estados, borradores, registro de publicado, propuesta y revisión semanal con IA.
 - Studio base: cuentas, artes, validación y adaptación de medidas, aprobaciones, agente, programación, calendario.
 - Investigación por marca, perfiles de marca, base de conocimiento de Instagram.

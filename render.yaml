@@ -14,12 +14,15 @@ services:
         value: "20.18.0"
 
   # Studio: artes para Instagram con validación, aprobaciones y agente (carpeta studio/).
-  # Para publicaciones programadas y datos persistentes usa plan Starter + Disk en /var/data
-  # y define DATA_DIR=/var/data (ver studio/README.md).
+  # Starter + Disk: no se duerme (programaciones, revisión de los lunes) y los datos sobreviven a los despliegues.
   - type: web
     name: campaign-studio
     runtime: node
-    plan: free
+    plan: starter
+    disk:
+      name: studio-data
+      mountPath: /var/data
+      sizeGB: 1
     rootDir: studio
     buildCommand: npm install
     startCommand: node server.js
@@ -31,3 +34,5 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
+      - key: DATA_DIR
+        value: /var/data

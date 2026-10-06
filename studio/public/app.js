@@ -32,6 +32,7 @@ const ICONS = {
   bulb: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
   flask: '<path d="M9 3h6M10 3v6L4.5 18.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.5L14 9V3"/><path d="M7 15h10"/>',
   doc: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
+  stories: '<circle cx="12" cy="12" r="9" stroke-dasharray="3.5 2.5"/><circle cx="12" cy="12" r="4.5"/>',
   inbox: '<path d="M3 13h5l1.5 3h5l1.5-3h5"/><path d="M5 5h14l2 8v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6z"/>',
 };
 const icon = (name, extra = "") =>
@@ -104,6 +105,10 @@ function toLocalInput(date) {
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
   return d.toISOString().slice(0, 16);
 }
+// Si el arte viene del Plan, propone la hora de su tarjeta.
+function slotDefault(post) {
+  return post?.plannedAt && Date.parse(post.plannedAt) > Date.now() ? toLocalInput(post.plannedAt) : defaultSlot();
+}
 function defaultSlot() {
   const d = new Date();
   d.setDate(d.getDate() + (d.getHours() >= 18 ? 1 : 0));
@@ -170,10 +175,11 @@ async function refresh() {
 // ------------------------------------------------------------------ navegación
 const NAV = [
   { id: "home", label: "Inicio", icon: "home" },
+  { id: "plan", label: "Plan", icon: "calendar" },
   { id: "approvals", label: "Aprobaciones", icon: "inbox" },
   { id: "research", label: "Investigación", icon: "flask" },
   { id: "library", label: "Artes", icon: "grid" },
-  { id: "calendar", label: "Calendario", icon: "calendar" },
+  { id: "calendar", label: "Calendario", icon: "clock" },
   { id: "accounts", label: "Cuentas", icon: "instagram" },
   { id: "settings", label: "Ajustes", icon: "gear" },
 ];
@@ -239,7 +245,7 @@ function rerenderView() {
 }
 
 function viewHtml() {
-  const views = { research: researchView, home: homeView, approvals: approvalsView, library: libraryView, calendar: calendarView, accounts: accountsView, settings: settingsView };
+  const views = { plan: planView, research: researchView, home: homeView, approvals: approvalsView, library: libraryView, calendar: calendarView, accounts: accountsView, settings: settingsView };
   return (views[state.view] || homeView)();
 }
 
@@ -277,6 +283,21 @@ function greeting() {
   return h < 12 ? "Buenos días" : h < 20 ? "Buenas tardes" : "Buenas noches";
 }
 
+// Avisos de cuentas reales: token caducado o a punto de caducar (los de Facebook duran 60 días).
+function accountAlertsHtml() {
+  return state.data.accounts
+    .filter((a) => !a.demo)
+    .map((a) => {
+      if (a.status === "error") return `<strong>@${esc(a.username)} no funciona.</strong> ${esc(a.statusMsg || "Vuelve a conectarla con un token nuevo.")}`;
+      const left = 60 - Math.floor((Date.now() - Date.parse(a.tokenSetAt || a.connectedAt)) / 86400000);
+      if (a.tokenKind === "facebook" && left <= 10) return `<strong>El token de @${esc(a.username)} caduca en ${Math.max(left, 0)} días.</strong> Genera uno nuevo y pégalo en Cuentas → Conectar Instagram.`;
+      return "";
+    })
+    .filter(Boolean)
+    .map((t) => `<div class="note note-warn" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px"><div style="flex:1;min-width:200px">${t}</div><button class="btn" data-go="accounts">Ir a Cuentas</button></div>`)
+    .join("");
+}
+
 function homeView() {
   const d = state.data;
   const scheduled = d.posts.filter((p) => p.status === "scheduled").sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
@@ -304,7 +325,9 @@ function homeView() {
         <button class="btn btn-primary" data-go="accounts">Conectar</button>
       </div>` : ""}
 
+    ${accountAlertsHtml()}
     ${composerHtml()}
+    ${planTodayHtml()}
 
     <div class="grid grid-3 stats" style="margin-top:16px">
       ${stat(approvalCount(), "Esperan tu aprobación", "inbox", "orange", "approvals")}
@@ -519,7 +542,7 @@ function accountsView() {
       <div class="card account">
         ${avatar(a)}
         <div class="row-main">
-          <div class="row-title">@${esc(a.username)} ${a.demo ? `<span class="pill pill-review" style="margin-left:4px">Prueba</span>` : a.status === "error" ? `<span class="pill pill-failed" style="margin-left:4px">Revisar</span>` : ""}</div>
+          <div class="row-title">@${esc(a.username)} ${a.demo ? `<span class="pill pill-review" style="margin-left:4px">Prueba</span>` : a.status === "error" ? `<span class="pill pill-failed" style="margin-left:4px" title="${esc(a.statusMsg || "")}">Revisar</span>` : ""}</div>
           <div class="row-sub">${esc(a.name || "")}${a.followers != null ? ` · ${a.followers.toLocaleString("es")} seguidores` : ""}</div>
           <div class="row-sub" style="margin-top:4px">${profileComplete(a) ? `${esc(a.profile.kind || "Perfil")} · ${esc((a.profile.about || "").slice(0, 70))}` : `<span style="color:var(--orange)">Falta el perfil de marca</span>`}${a.canResearch ? ` · <span style="color:var(--green)">métricas de referencias activas</span>` : ""}</div>
         </div>
@@ -543,14 +566,14 @@ function openConnect() {
       <div class="sheet-body">
         <div class="note note-info">Necesitas una cuenta de Instagram <strong>profesional</strong> (Empresa o Creador). Es gratis y se cambia desde la app de Instagram en Configuración → Tipo de cuenta.</div>
         <ol class="steps">
-          <li>Entra en <a href="https://developers.facebook.com/apps" target="_blank" rel="noopener">developers.facebook.com/apps</a> y crea una app de tipo <em>Empresa</em>.</li>
-          <li>Añade el producto <strong>Instagram</strong> → «API con inicio de sesión de Instagram».</li>
-          <li>En «Generar tokens de acceso», añade tu cuenta y pulsa <strong>Generar token</strong>.</li>
-          <li>Copia el token (empieza por <code>IG…</code>) y pégalo aquí.</li>
+          <li>Vincula tu Instagram a una página de Facebook: <a href="https://business.facebook.com/latest/settings/profiles" target="_blank" rel="noopener">Meta Business Suite → Configuración → Perfiles</a> → tu página → <strong>Conectar Instagram</strong>.</li>
+          <li>Abre el <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener">Explorador de la Graph API</a>, elige tu app y añade los permisos <code>instagram_basic</code>, <code>instagram_content_publish</code>, <code>instagram_manage_insights</code>, <code>pages_show_list</code>, <code>pages_read_engagement</code> y <code>business_management</code>.</li>
+          <li>Pulsa <strong>Generate Access Token</strong> y marca tu página <em>y</em> tu cuenta de Instagram.</li>
+          <li>Alarga el token a 60 días en el <a href="https://developers.facebook.com/tools/debug/accesstoken/" target="_blank" rel="noopener">depurador</a> (<em>Ampliar token de acceso</em>) y pega aquí el token largo (empieza por <code>EAA…</code>).</li>
         </ol>
-        <p class="muted small">También funciona un token de Facebook (<code>EAA…</code>) con permiso <code>instagram_content_publish</code>: se conectarán todas las cuentas vinculadas a tus páginas.</p>
+        <p class="muted small">Sin página de Facebook: en tu app de Meta → Instagram → «API con inicio de sesión de Instagram» → <strong>Generar token</strong> (empieza por <code>IG…</code>). Se renueva solo, pero no permite investigar otras cuentas.</p>
         <form id="connect-form">
-          <div class="field"><label>Token de acceso</label><textarea class="textarea" name="token" style="min-height:90px;font-family:ui-monospace,monospace;font-size:13px" placeholder="IGAA…" required></textarea></div>
+          <div class="field"><label>Token de acceso</label><textarea class="textarea" name="token" style="min-height:90px;font-family:ui-monospace,monospace;font-size:13px" placeholder="EAA… o IG…" required></textarea></div>
           <button class="btn btn-primary btn-lg" style="width:100%" type="submit">Conectar</button>
         </form>
         <p class="muted small" style="margin-top:12px">El token se guarda solo en tu servidor y nunca se muestra en el navegador. Los tokens de larga duración caducan a los 60 días: si una cuenta deja de funcionar, vuelve a pegar un token nuevo.</p>
@@ -917,6 +940,510 @@ async function addResearchImages(list) {
   rerenderView();
 }
 
+// ------------------------------------------------------------------ Plan
+const PLAN_STATUS = {
+  proposed: { label: "Propuesta", cls: "pill-review" },
+  approved: { label: "Aprobada", cls: "pill-approved" },
+  modified: { label: "Modificada", cls: "pill-scheduled" },
+  published: { label: "Publicada", cls: "pill-published" },
+  skipped: { label: "Descartada", cls: "pill-idea" },
+};
+const planPill = (s) => `<span class="pill ${PLAN_STATUS[s].cls}">${PLAN_STATUS[s].label}</span>`;
+const FORMAT_UI = { REEL: ["Reel", "play"], CARRUSEL: ["Carrusel", "stack"], POST: ["Post", "image"], STORIES: ["Stories", "stories"] };
+const GOAL_UI = { seguidores: "Seguidores", leads: "Leads", comunidad: "Comunidad", autoridad: "Autoridad", ventas: "Ventas", activacion: "Activación" };
+const METRIC_UI = { views: "Reproducciones", likes: "Me gusta", comments: "Comentarios", saves: "Guardados", shares: "Compartidos", follows: "Seguidores nuevos", signups: "Registros" };
+const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+const planState = { accountId: "", mode: "week", cursor: "" };
+
+const planTz = () => state.data.plan?.timezone || "America/Sao_Paulo";
+const planToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: planTz() }).format(new Date());
+function pAddDays(date, n) {
+  const d = new Date(date + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+const pWeekday = (date) => (new Date(date + "T12:00:00Z").getUTCDay() + 6) % 7; // 0 = lunes
+const pWeekStart = (date) => pAddDays(date, -pWeekday(date));
+const pDay = (date, opts = { weekday: "short", day: "numeric", month: "short" }) => new Date(date + "T12:00:00Z").toLocaleDateString("es", { timeZone: "UTC", ...opts });
+const planSlots = (accId) => (state.data.plan?.slots || []).filter((s) => s.accountId === accId).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+const slotById = (id) => state.data.plan?.slots.find((s) => s.id === id);
+
+// Horas de referencia (Brasil, finanzas) según el día de la semana. Se sustituyen por las de tus métricas cuando las haya.
+function suggestedTimes(date) {
+  const w = pWeekday(date);
+  if (w <= 3) return ["12:00", "12:30", "19:00", "20:00"];
+  if (w === 4) return ["12:00", "18:30"];
+  if (w === 5) return ["10:00", "10:30", "11:00"];
+  return ["18:00", "19:00", "20:00"];
+}
+
+function planView() {
+  const accs = state.data.accounts;
+  if (!accs.length) {
+    return `<div class="page-head"><div><h1 class="page-title">Plan</h1></div></div>
+      <div class="card empty">${icon("calendar")}<h3>Primero, una cuenta</h3><p>Conecta tu Instagram o crea una cuenta de prueba con el mismo nombre de usuario: al conectar la real, hereda el plan.</p>
+      <button class="btn btn-primary" data-go="accounts" style="margin-top:8px">Ir a Cuentas</button></div>`;
+  }
+  const acc = accountById(planState.accountId) || accs.find((a) => planSlots(a.id).length) || accs[0];
+  planState.accountId = acc.id;
+  if (!planState.cursor) planState.cursor = planToday();
+  const slots = planSlots(acc.id);
+  const today = planToday();
+  const summary = state.data.plan?.summaries?.[acc.id];
+  const count = (st) => slots.filter((s) => s.status === st).length;
+  const reviews = (state.data.plan?.reviews || []).filter((r) => r.accountId === acc.id && r.changes.some((c) => c.status === "pending"));
+
+  // Periodo visible
+  let from, to, label;
+  if (planState.mode === "month") {
+    const c = planState.cursor;
+    from = c.slice(0, 8) + "01";
+    to = pAddDays(pAddDays(from, 32).slice(0, 8) + "01", -1);
+    label = pDay(from, { month: "long", year: "numeric" });
+  } else if (planState.mode === "week") {
+    from = pWeekStart(planState.cursor);
+    to = pAddDays(from, 6);
+    label = `${pDay(from, { day: "numeric", month: "short" })} – ${pDay(to, { day: "numeric", month: "short" })}`;
+  } else {
+    from = today;
+    to = "9999-12-31";
+    label = "Desde hoy";
+  }
+  const visible = slots.filter((s) => s.date >= from && s.date <= to && s.status !== "published");
+  const toApprove = visible.filter((s) => s.status === "proposed");
+
+  let body;
+  if (planState.mode === "week") body = planWeekHtml(slots, from, today);
+  else if (planState.mode === "month") body = planMonthHtml(slots, from, today);
+  else body = planListHtml(visible.filter((s) => s.status !== "skipped"));
+
+  const published = slots.filter((s) => s.status === "published").reverse();
+
+  return `
+    <div class="page-head">
+      <div><h1 class="page-title">Plan</h1><p class="page-sub">@${esc(acc.username)} · horas de Brasília (${esc(planTz())})</p></div>
+      <div class="plan-actions">
+        <button class="btn" data-plan-action="new">${icon("plus")}Tarjeta</button>
+        <button class="btn" data-plan-action="replan">${icon("spark")}Revisión semanal</button>
+        <button class="btn btn-primary" data-plan-action="generate">${icon("spark")}Proponer con IA</button>
+      </div>
+    </div>
+    ${accs.length > 1 ? `<div class="chips" style="padding:0 0 14px">${accs.map((a) => `<button class="chip ${a.id === acc.id ? "chip-on" : ""}" data-plan-account="${a.id}">@${esc(a.username)}</button>`).join("")}</div>` : ""}
+
+    <div class="grid plan-top">
+      <div class="card">
+        <div class="plan-stats">
+          ${["proposed", "approved", "modified", "published"].map((st) => `<div><span class="plan-stat-num">${count(st)}</span>${planPill(st)}</div>`).join("")}
+        </div>
+        ${summary ? `<div class="plan-summary"><strong>El camino propuesto${summary.from ? ` (${pDay(summary.from, { day: "numeric", month: "short" })} – ${pDay(summary.to, { day: "numeric", month: "short" })})` : ""}:</strong> ${esc(summary.text)}</div>` : `<p class="muted small" style="margin:12px 0 0">Aún no hay plan. Pulsa «Proponer con IA» o añade tarjetas a mano.</p>`}
+      </div>
+      <div class="card plan-legend small">
+        <strong>Cómo funciona</strong>
+        <div><span class="pill pill-review">Propuesta</span> la sugiere el agente: apruébala o cámbiala.</div>
+        <div><span class="pill pill-approved">Aprobada</span> tal cual. <span class="pill pill-scheduled">Modificada</span> aprobada con tus cambios.</div>
+        <div>«Crear borrador» la lleva a Artes con su brief; al aprobar el arte, se propone su hora.</div>
+      </div>
+    </div>
+
+    ${reviews.map(reviewHtml).join("")}
+
+    <div class="toolbar plan-toolbar">
+      <div class="segmented">${[["week", "Semana"], ["month", "Mes"], ["list", "Lista"]].map(([m, l]) => `<button class="${planState.mode === m ? "on" : ""}" data-plan-mode="${m}">${l}</button>`).join("")}</div>
+      ${planState.mode !== "list" ? `<div class="plan-nav">
+        <button class="btn btn-icon" data-plan-move="-1" aria-label="Anterior">${icon("left")}</button>
+        <button class="btn" data-plan-move="0">Hoy</button>
+        <button class="btn btn-icon" data-plan-move="1" aria-label="Siguiente">${icon("right")}</button>
+        <strong class="plan-range">${esc(label)}</strong>
+      </div>` : `<strong class="plan-range">${label}</strong>`}
+      ${toApprove.length ? `<button class="btn btn-primary" data-plan-approve-all="${toApprove.map((s) => s.id).join(",")}">${icon("check")}Aprobar ${toApprove.length} ${toApprove.length === 1 ? "propuesta" : "propuestas"}</button>` : ""}
+    </div>
+    ${body}
+
+    <div class="section-title">Ya publicado <span class="count">${published.length}</span>
+      <button class="btn btn-ghost" style="margin-left:auto" data-plan-action="published">${icon("plus")}Registrar publicado</button></div>
+    ${published.length ? `<div class="card plan-published">${published.map(publishedRow).join("")}</div>` : `<div class="card muted small">Registra lo que ya salió (con su enlace y, si quieres, sus números): el agente lo usa para no repetir y para ver qué funciona.</div>`}
+
+    <div class="plan-foot small muted">
+      <a href="/api/plan/export?accountId=${acc.id}" download>Exportar plan (JSON)</a> ·
+      <label class="link-like">Importar plan<input type="file" accept="application/json,.json" id="plan-import" hidden></label>
+    </div>`;
+}
+
+function slotCard(s, compact = false) {
+  const [fl, fi] = FORMAT_UI[s.format] || FORMAT_UI.POST;
+  return `
+    <div class="slot st-${s.status}" data-plan-open="${s.id}" role="button" tabindex="0">
+      <div class="slot-top"><span class="slot-format">${icon(fi)}${fl}</span><span class="slot-time">${esc(s.time)}</span></div>
+      <div class="slot-theme">${esc(s.theme || "Sin tema")}</div>
+      ${!compact && s.hook ? `<div class="slot-hook">“${esc(s.hook)}”</div>` : ""}
+      <div class="slot-foot">${planPill(s.status)}<span class="tag">${esc(GOAL_UI[s.goal] || s.goal)}</span>${s.postId ? `<span class="tag tag-soft">${icon("image", 'style="width:11px;height:11px;vertical-align:-1px"')} borrador</span>` : ""}</div>
+      ${s.status === "proposed" ? `<button class="btn btn-sm" data-plan-approve="${s.id}">${icon("check")}Aprobar</button>` : ""}
+    </div>`;
+}
+
+function planWeekHtml(slots, from, today) {
+  const cols = [];
+  for (let i = 0; i < 7; i++) {
+    const d = pAddDays(from, i);
+    const day = slots.filter((s) => s.date === d && s.status !== "skipped");
+    const phase = day.find((s) => s.phase)?.phase;
+    cols.push(`
+      <div class="week-col ${d === today ? "today" : ""} ${d < today ? "past" : ""}">
+        <div class="week-head"><span>${WEEKDAYS[i]}</span><strong>${Number(d.slice(8))}</strong>${phase ? `<em>${esc(phase)}</em>` : ""}</div>
+        ${day.map((s) => slotCard(s)).join("") || `<button class="week-empty" data-plan-new-date="${d}">${icon("plus")}</button>`}
+      </div>`);
+  }
+  return `<div class="plan-week">${cols.join("")}</div>`;
+}
+
+function planMonthHtml(slots, from, today) {
+  const start = pWeekStart(from);
+  const month = from.slice(0, 7);
+  const cells = [];
+  for (let i = 0; i < 42; i++) {
+    const d = pAddDays(start, i);
+    if (i >= 35 && d.slice(0, 7) !== month) break;
+    const day = slots.filter((s) => s.date === d && s.status !== "skipped");
+    cells.push(`
+      <div class="cal-day ${d.slice(0, 7) !== month ? "out" : ""} ${d === today ? "today" : ""}" data-plan-day="${d}">
+        <span class="cal-num">${Number(d.slice(8))}</span>
+        ${day.map((s) => `<div class="cal-ev plan-ev st-${s.status}" data-plan-open="${s.id}" title="${esc(s.theme)}">${icon((FORMAT_UI[s.format] || FORMAT_UI.POST)[1])}<span>${esc(s.time)} ${esc(s.theme)}</span></div>`).join("")}
+      </div>`);
+  }
+  return `<div class="cal">${WEEKDAYS.map((d) => `<div class="cal-head">${d}</div>`).join("")}${cells.join("")}</div>`;
+}
+
+function planListHtml(slots) {
+  if (!slots.length) return `<div class="card empty">${icon("calendar")}<h3>Nada planificado desde hoy</h3><p>Pide una propuesta al agente o añade tarjetas.</p></div>`;
+  const weeks = {};
+  for (const s of slots) (weeks[pWeekStart(s.date)] ||= []).push(s);
+  return Object.entries(weeks)
+    .map(([ws, list]) => `
+      <div class="section-title small-title">Semana del ${pDay(ws, { day: "numeric", month: "long" })}</div>
+      <div class="card plan-list">${list.map((s) => `
+        <div class="list-row" data-plan-open="${s.id}">
+          <div class="plan-date"><strong>${pDay(s.date, { weekday: "short" })}</strong><span>${Number(s.date.slice(8))}</span></div>
+          <div class="row-main">
+            <div class="row-title">${esc(s.theme)}</div>
+            <div class="row-sub">${esc(s.time)} · ${(FORMAT_UI[s.format] || FORMAT_UI.POST)[0]} · ${esc(GOAL_UI[s.goal] || "")}${s.phase ? ` · ${esc(s.phase)}` : ""}</div>
+          </div>
+          ${planPill(s.status)}
+        </div>`).join("")}</div>`)
+    .join("");
+}
+
+function publishedRow(s) {
+  const m = s.metrics || {};
+  const nums = Object.keys(METRIC_UI).filter((k) => m[k] != null).map((k) => `${Number(m[k]).toLocaleString("es")} ${METRIC_UI[k].toLowerCase()}`);
+  return `
+    <div class="list-row" data-plan-open="${s.id}">
+      <div class="plan-date"><strong>${pDay(s.date, { weekday: "short" })}</strong><span>${Number(s.date.slice(8))}</span></div>
+      <div class="row-main">
+        <div class="row-title">${esc(s.theme)}</div>
+        <div class="row-sub">${(FORMAT_UI[s.format] || FORMAT_UI.POST)[0]} · ${esc(s.time)}${nums.length ? " · " + nums.join(" · ") : ` · <span style="color:var(--orange)">sin números todavía</span>`}</div>
+      </div>
+      ${s.publishedUrl ? `<a class="btn btn-icon" href="${esc(s.publishedUrl)}" target="_blank" rel="noopener" aria-label="Abrir en Instagram">${icon("link")}</a>` : ""}
+    </div>`;
+}
+
+function reviewHtml(r) {
+  const pending = r.changes.filter((c) => c.status === "pending");
+  return `
+    <div class="card plan-review">
+      <div class="approval-kind">${icon("spark", 'style="width:13px;height:13px;vertical-align:-2px"')} Revisión semanal · semana del ${pDay(r.weekStart, { day: "numeric", month: "long" })}</div>
+      <p style="margin:6px 0 8px">${esc(r.summary)}</p>
+      ${r.learnings.length ? `<ul class="issues small">${r.learnings.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}
+      ${pending.map((c) => {
+        const s = c.slotId && slotById(c.slotId);
+        const what = c.kind === "add" ? `Añadir: ${esc(c.fields.theme || "pieza nueva")} (${esc(c.fields.date || "")} ${esc(c.fields.time || "")})`
+          : c.kind === "remove" ? `Quitar: ${esc(s?.theme || "tarjeta")}`
+          : `Cambiar «${esc(s?.theme || "tarjeta")}»: ${Object.entries(c.fields).map(([k, v]) => `${esc(k)} → ${esc(Array.isArray(v) ? v.join(" / ") : v).slice(0, 120)}`).join("; ")}`;
+        return `<div class="review-change"><div class="row-main"><div>${what}</div><div class="muted small">${esc(c.reason)}</div></div>
+          <button class="btn btn-sm btn-danger" data-plan-change="${r.id}:${c.id}:reject">No</button>
+          <button class="btn btn-sm btn-primary" data-plan-change="${r.id}:${c.id}:apply">Aplicar</button></div>`;
+      }).join("")}
+    </div>`;
+}
+
+// ---------- ficha de una tarjeta ----------
+function openSlot(id, preset = {}) {
+  const existing = id ? slotById(id) : null;
+  const s = existing || { date: preset.date || pAddDays(planToday(), 1), time: "19:00", format: "REEL", goal: "leads", status: preset.status || "approved", outline: [], hashtags: [], metrics: {}, history: [] };
+  const isNew = !existing;
+  const asPublished = s.status === "published";
+  const acc = accountById(existing?.accountId || planState.accountId);
+  const opt = (list, val) => list.map(([v, l]) => `<option value="${v}" ${v === val ? "selected" : ""}>${l}</option>`).join("");
+  openSheet(`
+    <div class="sheet sheet-md" id="slot-sheet">
+      <div class="sheet-head">
+        <div style="display:flex;align-items:center;gap:10px;min-width:0"><h2 style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${isNew ? (asPublished ? "Registrar publicado" : "Nueva tarjeta") : esc(s.theme || "Tarjeta")}</h2>${isNew ? "" : planPill(s.status)}</div>
+        <div style="display:flex;gap:6px">
+          ${isNew ? "" : `<button class="btn btn-icon btn-danger" data-slot="delete" aria-label="Eliminar">${icon("trash")}</button>`}
+          <button class="btn btn-icon" data-close aria-label="Cerrar">${icon("x")}</button>
+        </div>
+      </div>
+      <form id="slot-form">
+        <div class="sheet-body">
+          ${s.why ? `<div class="note note-info small"><strong>Por qué:</strong> ${esc(s.why)}</div>` : ""}
+          <div class="grid grid-3" style="gap:12px">
+            <div class="field"><label>Día</label><input class="input" type="date" name="date" value="${esc(s.date)}" required></div>
+            <div class="field"><label>Hora (Brasília)</label><input class="input" type="time" name="time" value="${esc(s.time)}" required></div>
+            <div class="field"><label>Formato</label><select class="select" name="format">${opt(Object.entries(FORMAT_UI).map(([k, v]) => [k, v[0]]), s.format)}</select></div>
+          </div>
+          <div class="chips" style="padding:0 0 14px" id="slot-times">${suggestedTimes(s.date).map((t) => `<button type="button" class="chip" data-slot-time="${t}">${t}</button>`).join("")}<span class="muted small" style="align-self:center">horas de referencia</span></div>
+          <div class="grid grid-2" style="gap:12px">
+            <div class="field"><label>Tema</label><input class="input" name="theme" value="${esc(s.theme || "")}" placeholder="De qué va la pieza" required></div>
+            <div class="field"><label>Objetivo</label><select class="select" name="goal">${opt(Object.entries(GOAL_UI), s.goal)}</select></div>
+          </div>
+          ${asPublished ? `
+            <div class="field"><label>Enlace de la publicación</label><input class="input" name="publishedUrl" value="${esc(s.publishedUrl || "")}" placeholder="https://www.instagram.com/reel/…"></div>
+            <div class="field"><label>Números (opcional; mejor a las 48 h)</label><div class="metric-grid">${Object.entries(METRIC_UI).map(([k, l]) => `<label><span>${l}</span><input class="input" type="number" min="0" name="m_${k}" value="${s.metrics?.[k] ?? ""}"></label>`).join("")}</div></div>` : ""}
+          <div class="field"><label>Fase</label><input class="input" name="phase" value="${esc(s.phase || "")}" placeholder="Ej.: Lista de espera"></div>
+          <div class="field"><label>Gancho (PT-BR)</label><textarea class="textarea" name="hook" style="min-height:60px">${esc(s.hook || "")}</textarea></div>
+          <div class="field"><label>Estructura: diapositivas o escenas (una por línea)</label><textarea class="textarea" name="outline" style="min-height:110px">${esc((s.outline || []).join("\n"))}</textarea></div>
+          <div class="field"><label>Copy (PT-BR)</label><textarea class="textarea" name="caption" style="min-height:150px">${esc(s.caption || "")}</textarea><div class="hint"><span id="slot-count"></span></div></div>
+          <div class="grid grid-2" style="gap:12px">
+            <div class="field"><label>CTA</label><input class="input" name="cta" value="${esc(s.cta || "")}"></div>
+            <div class="field"><label>Hashtags</label><input class="input" name="hashtags" value="${esc((s.hashtags || []).join(" "))}"></div>
+          </div>
+          <div class="field"><label>Producción</label><textarea class="textarea" name="production" style="min-height:60px" placeholder="Quién lo hace y con qué material">${esc(s.production || "")}</textarea></div>
+          <div class="field"><label>Notas</label><textarea class="textarea" name="notes" style="min-height:60px">${esc(s.notes || "")}</textarea></div>
+          ${!isNew && !asPublished ? `<details class="small muted"><summary>Ya se publicó</summary>
+            <div style="display:flex;gap:8px;margin-top:8px"><input class="input" id="slot-pub-url" placeholder="Enlace de Instagram (opcional)"><button class="btn" type="button" data-slot="published">Marcar publicada</button></div></details>` : ""}
+          ${s.history?.length ? `<div class="small muted" style="margin-top:12px">${s.history.slice(0, 4).map((h) => `<div>${esc(h.text)} · ${relative(h.at)}</div>`).join("")}</div>` : ""}
+        </div>
+        <div class="sheet-foot">
+          ${!isNew && !asPublished && s.status !== "skipped" ? `<button class="btn btn-ghost" type="button" data-slot="skip" style="margin-right:auto;color:var(--red)">Descartar</button>` : ""}
+          ${s.status === "skipped" ? `<button class="btn" type="button" data-slot="restore" style="margin-right:auto">Recuperar</button>` : ""}
+          ${!isNew && !asPublished && s.format !== "STORIES" ? `<button class="btn" type="button" data-slot="draft">${icon("image")}${s.postId ? "Abrir borrador" : "Crear borrador"}</button>` : ""}
+          <button class="btn ${s.status === "proposed" ? "" : "btn-primary"}" type="submit">${isNew ? (asPublished ? "Registrar" : "Añadir") : "Guardar"}</button>
+          ${s.status === "proposed" ? `<button class="btn btn-primary" type="button" data-slot="approve">${icon("check")}Aprobar</button>` : ""}
+        </div>
+      </form>
+    </div>`);
+  bindSlot(existing, acc, asPublished);
+}
+
+function slotValues(form, asPublished) {
+  const f = Object.fromEntries(new FormData(form).entries());
+  const v = { date: f.date, time: f.time, format: f.format, theme: f.theme, goal: f.goal, phase: f.phase, hook: f.hook, outline: f.outline, caption: f.caption, cta: f.cta, hashtags: f.hashtags, production: f.production, notes: f.notes };
+  if (asPublished) {
+    v.publishedUrl = f.publishedUrl || "";
+    v.metrics = Object.fromEntries(Object.keys(METRIC_UI).map((k) => [k, f["m_" + k]]));
+  }
+  return v;
+}
+
+function bindSlot(slot, acc, asPublished) {
+  const form = $("#slot-form");
+  const initial = JSON.stringify(slotValues(form, asPublished));
+  const dirty = () => JSON.stringify(slotValues(form, asPublished)) !== initial;
+  const done = async (msg) => {
+    await refresh();
+    closeSheet();
+    rerenderView();
+    if (msg) toast(msg);
+  };
+  const counter = () => ($("#slot-count").textContent = `${form.caption.value.length} / 2200`);
+  counter();
+  form.caption.addEventListener("input", counter);
+  form.date.addEventListener("change", () => {
+    $("#slot-times").innerHTML = suggestedTimes(form.date.value).map((t) => `<button type="button" class="chip" data-slot-time="${t}">${t}</button>`).join("") + `<span class="muted small" style="align-self:center">horas de referencia</span>`;
+  });
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    busy(form.querySelector('[type="submit"]'), async () => {
+      if (!slot) {
+        await api("/plan/slots", { body: { accountId: acc.id, status: asPublished ? "published" : "approved", ...slotValues(form, asPublished) } });
+        return done(asPublished ? "Registrado" : "Tarjeta añadida");
+      }
+      await api(`/plan/slots/${slot.id}`, { method: "PATCH", body: slotValues(form, asPublished) });
+      done(dirty() ? "Guardado" : "");
+    });
+  });
+  $("#slot-sheet").addEventListener("click", (e) => {
+    const chip = e.target.closest("[data-slot-time]");
+    if (chip) return (form.time.value = chip.dataset.slotTime);
+    const b = e.target.closest("[data-slot]");
+    if (!b || !slot) return;
+    const act = b.dataset.slot;
+    busy(b, async () => {
+      if (act === "approve") {
+        if (dirty()) {
+          await api(`/plan/slots/${slot.id}`, { method: "PATCH", body: slotValues(form, asPublished) });
+          return done("Aprobada con tus cambios (modificada)");
+        }
+        await api(`/plan/slots/${slot.id}/status`, { body: { status: "approved" } });
+        return done("Aprobada");
+      }
+      if (act === "skip" || act === "restore") {
+        await api(`/plan/slots/${slot.id}/status`, { body: { status: act === "skip" ? "skipped" : "proposed" } });
+        return done(act === "skip" ? "Descartada" : "Recuperada");
+      }
+      if (act === "published") {
+        if (dirty()) await api(`/plan/slots/${slot.id}`, { method: "PATCH", body: slotValues(form, asPublished) });
+        await api(`/plan/slots/${slot.id}/status`, { body: { status: "published", publishedUrl: $("#slot-pub-url").value.trim() } });
+        return done("Marcada como publicada");
+      }
+      if (act === "delete") {
+        if (!confirm("¿Eliminar esta tarjeta del plan?")) return;
+        await api(`/plan/slots/${slot.id}`, { method: "DELETE" });
+        return done("Eliminada");
+      }
+      if (act === "draft") {
+        if (dirty()) await api(`/plan/slots/${slot.id}`, { method: "PATCH", body: slotValues(form, asPublished) });
+        const post = await api(`/plan/slots/${slot.id}/draft`, { body: {} });
+        await refresh();
+        closeSheet();
+        rerenderView();
+        openPost(post.id);
+      }
+    });
+  });
+}
+
+// ---------- pedir plan o revisión al agente ----------
+function openPlanAgent(kind) {
+  const acc = accountById(planState.accountId);
+  const hasAI = state.data.settings.hasAnthropic;
+  const t = planToday();
+  const endOfMonth = pAddDays(pAddDays(t.slice(0, 8) + "01", 32).slice(0, 8) + "01", -1);
+  const isGen = kind === "generate";
+  openSheet(`
+    <div class="sheet sheet-sm" id="plan-agent-sheet">
+      <div class="sheet-head"><h2>${isGen ? "Proponer plan con IA" : "Revisión semanal"} · @${esc(acc.username)}</h2><button class="btn btn-icon" data-close>${icon("x")}</button></div>
+      <form id="plan-agent-form">
+        <div class="sheet-body">
+          ${hasAI ? "" : `<div class="note note-warn">Necesita la API key de Anthropic (Ajustes). Mientras tanto puedes editar el plan a mano.</div>`}
+          <p class="muted small" style="margin-top:0">${isGen
+            ? "El agente usa el perfil de marca, lo ya publicado, lo aprobado (no lo toca), las ideas buenas de Investigación y los horarios de referencia de Brasil. Las propuestas sin aprobar de ese periodo se sustituyen."
+            : "El agente mira lo publicado y sus números, y propone cambios para las próximas tarjetas. Tú aplicas o descartas cada uno."}</p>
+          ${isGen ? `<div class="grid grid-2" style="gap:12px">
+              <div class="field"><label>Desde</label><input class="input" type="date" name="from" value="${pAddDays(t, 1)}" required></div>
+              <div class="field"><label>Hasta</label><input class="input" type="date" name="to" value="${endOfMonth}" required></div>
+            </div>` : `<div class="field"><label>Semana que empieza el</label><input class="input" type="date" name="weekStart" value="${pWeekStart(t)}" required></div>`}
+          <div class="field"><label>Indicaciones (opcional)</label><textarea class="textarea" name="instructions" placeholder="${isGen ? "Ej.: prioriza registros en la lista antes del 20/10; máximo 5 piezas por semana; yo grabo los martes." : "Ej.: el reel de la foto de la cuenta funcionó muy bien; repite ese formato."}"></textarea></div>
+          <p class="muted small" id="plan-agent-wait" hidden>${icon("clock", 'style="width:13px;height:13px;vertical-align:-2px"')} Pensando el plan… tarda 1–3 minutos.</p>
+        </div>
+        <div class="sheet-foot"><button class="btn" type="button" data-close>Cancelar</button><button class="btn btn-primary" type="submit" ${hasAI ? "" : "disabled"}>${icon("spark")}${isGen ? "Proponer" : "Revisar"}</button></div>
+      </form>
+    </div>`);
+  $("#plan-agent-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const f = Object.fromEntries(new FormData(e.target).entries());
+    $("#plan-agent-wait").hidden = false;
+    busy(e.target.querySelector('[type="submit"]'), async () => {
+      const r = await api(isGen ? "/plan/generate" : "/plan/replan", { body: { accountId: acc.id, ...f } });
+      await refresh();
+      closeSheet();
+      if (isGen) {
+        planState.mode = "list";
+        toast(`${r.created} piezas propuestas`);
+      } else toast(r.changes.length ? `${r.changes.length} cambios para revisar` : "Sin cambios: el plan sigue bien");
+      rerenderView();
+    });
+  });
+}
+
+async function importPlan(file) {
+  try {
+    const data = JSON.parse(await file.text());
+    const acc = accountById(planState.accountId);
+    if (!confirm(`¿Importar ${data.slots?.length || 0} tarjetas en @${acc.username}? Sustituye las tarjetas actuales de esta cuenta (salvo las que ya tienen borrador).`)) return;
+    const r = await api("/plan/import", { body: { accountId: acc.id, data, replace: true, includeProfile: !profileComplete(acc) } });
+    await refresh();
+    rerenderView();
+    toast(`${r.imported} tarjetas importadas`);
+  } catch (e) {
+    toast(e.message.includes("JSON") ? "Ese archivo no es un plan válido." : e.message, "error");
+  }
+}
+
+// Inicio: lo que toca hoy y lo próximo del plan.
+function planTodayHtml() {
+  const t = planToday();
+  const all = (state.data.plan?.slots || []).filter((s) => !["skipped", "published"].includes(s.status) && s.date >= t).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  if (!all.length) return "";
+  const todays = all.filter((s) => s.date === t);
+  const next = all.filter((s) => s.date !== t).slice(0, 3);
+  const row = (s) => `<div class="list-row" data-go="plan" data-plan-focus="${s.id}">
+      <div class="plan-date"><strong>${pDay(s.date, { weekday: "short" })}</strong><span>${Number(s.date.slice(8))}</span></div>
+      <div class="row-main"><div class="row-title">${esc(s.theme)}</div><div class="row-sub">${esc(s.time)} · ${(FORMAT_UI[s.format] || FORMAT_UI.POST)[0]} · @${esc(accountById(s.accountId)?.username || "—")}</div></div>
+      ${planPill(s.status)}</div>`;
+  return `<div class="card" style="margin-top:16px">
+      <h3 style="margin:0 0 6px;font-size:17px">${todays.length ? "Hoy en el plan" : "Próximo en el plan"}</h3>
+      ${(todays.length ? todays : next).map(row).join("")}
+      ${todays.length && next.length ? `<div class="muted small" style="margin-top:8px">Después: ${next.map((s) => `${pDay(s.date, { weekday: "short", day: "numeric" })} · ${esc(s.theme)}`).join(" — ")}</div>` : ""}
+    </div>`;
+}
+
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-plan-open],[data-plan-approve],[data-plan-approve-all],[data-plan-mode],[data-plan-move],[data-plan-account],[data-plan-action],[data-plan-change],[data-plan-new-date],[data-plan-day],[data-plan-focus]");
+  if (!t || t.closest(".sheet")) return;
+  if (t.dataset.planFocus) {
+    const s = slotById(t.dataset.planFocus);
+    if (s) {
+      planState.accountId = s.accountId;
+      planState.cursor = s.date;
+      planState.mode = "week";
+    }
+    return rerenderView(); // el clic global ya cambió a la vista Plan
+  }
+  if (t.dataset.planApprove) {
+    e.stopPropagation();
+    return busy(t, async () => {
+      await api(`/plan/slots/${t.dataset.planApprove}/status`, { body: { status: "approved" } });
+      await refresh();
+      rerenderView();
+    });
+  }
+  if (t.dataset.planApproveAll) {
+    return busy(t, async () => {
+      const r = await api("/plan/approve", { body: { ids: t.dataset.planApproveAll.split(",") } });
+      await refresh();
+      rerenderView();
+      toast(`${r.approved} aprobadas`);
+    });
+  }
+  if (t.dataset.planOpen) return openSlot(t.dataset.planOpen);
+  if (t.dataset.planNewDate) return openSlot(null, { date: t.dataset.planNewDate });
+  if (t.dataset.planDay && e.target === t) return openSlot(null, { date: t.dataset.planDay });
+  if (t.dataset.planMode) {
+    planState.mode = t.dataset.planMode;
+    return rerenderView();
+  }
+  if (t.dataset.planMove) {
+    const n = Number(t.dataset.planMove);
+    if (n === 0) planState.cursor = planToday();
+    else if (planState.mode === "month") planState.cursor = pAddDays(pAddDays(planState.cursor.slice(0, 8) + "01", n > 0 ? 32 : -1).slice(0, 8) + "01", 0);
+    else planState.cursor = pAddDays(planState.cursor, 7 * n);
+    return rerenderView();
+  }
+  if (t.dataset.planAccount) {
+    planState.accountId = t.dataset.planAccount;
+    return rerenderView();
+  }
+  if (t.dataset.planChange) {
+    const [rid, cid, decision] = t.dataset.planChange.split(":");
+    return busy(t, async () => {
+      await api(`/plan/reviews/${rid}/changes/${cid}`, { body: { decision } });
+      await refresh();
+      rerenderView();
+    });
+  }
+  const a = t.dataset.planAction;
+  if (a === "new") openSlot(null);
+  if (a === "published") openSlot(null, { status: "published", date: planToday() });
+  if (a === "generate" || a === "replan") openPlanAgent(a);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && e.target.matches?.(".slot[data-plan-open]")) openSlot(e.target.dataset.planOpen);
+});
+document.addEventListener("change", (e) => {
+  if (e.target.id === "plan-import" && e.target.files[0]) importPlan(e.target.files[0]);
+});
+
 // ------------------------------------------------------------------ Ajustes
 function settingsView() {
   const s = state.data.settings;
@@ -933,6 +1460,7 @@ function settingsView() {
           <button class="btn" type="button" data-action="test-ai">Probar conexión</button>
           ${s.hasAnthropic ? `<button class="btn btn-ghost" type="button" data-action="remove-ai" style="color:var(--red)">Quitar key</button>` : ""}
         </div>
+        <label class="switch" style="margin-top:16px"><input type="checkbox" name="autoReview" ${s.autoReview ? "checked" : ""}><span></span> Revisión semanal automática los lunes a las 8:00 (te deja los cambios para aprobar en Plan)</label>
       </div>
       <div class="card">
         <h3 style="margin:0 0 4px;font-size:17px">Guía de marca</h3>
@@ -1123,7 +1651,7 @@ function actionsHtml(post) {
       <button class="btn btn-primary" data-post-action="publish">Publicar ahora</button>`;
   }
   if (post.status === "approved" || (post.status === "failed" && post.history.some((h) => h.text.startsWith("Aprobado")))) {
-    return `<input class="input" type="datetime-local" id="d-when" value="${defaultSlot()}" style="width:auto;margin-right:auto">
+    return `<input class="input" type="datetime-local" id="d-when" value="${slotDefault(post)}" style="width:auto;margin-right:auto">
       <button class="btn" data-post-action="schedule">${icon("clock")}Programar</button>
       <button class="btn btn-primary" data-post-action="publish">${post.status === "failed" ? "Reintentar ahora" : "Publicar ahora"}</button>`;
   }
@@ -1136,7 +1664,7 @@ function actionsHtml(post) {
         <button class="${m === "now" ? "on" : ""}" data-mode="now">Publicar ya</button>
         <button class="${m === "only" ? "on" : ""}" data-mode="only">Solo aprobar</button>
       </div>
-      ${m === "schedule" ? `<input class="input" type="datetime-local" id="d-when" value="${defaultSlot()}" style="width:auto">` : ""}
+      ${m === "schedule" ? `<input class="input" type="datetime-local" id="d-when" value="${slotDefault(post)}" style="width:auto">` : ""}
     </div>
     <button class="btn btn-danger" data-post-action="reject">Rechazar</button>
     <button class="btn btn-primary" data-post-action="approve" ${errors ? 'disabled title="Corrige los errores de validación"' : ""}>${icon("check")}Aprobar</button>`;
@@ -1695,7 +2223,7 @@ document.addEventListener("submit", (e) => {
   if (e.target.id === "settings-form") {
     e.preventDefault();
     const f = e.target;
-    const body = { brandGuide: f.brandGuide.value, publicUrl: f.publicUrl.value };
+    const body = { brandGuide: f.brandGuide.value, publicUrl: f.publicUrl.value, autoReview: f.autoReview.checked };
     if (f.anthropicKey.value.trim()) body.anthropicKey = f.anthropicKey.value.trim();
     if (f.newPassword?.value) Object.assign(body, { newPassword: f.newPassword.value, currentPassword: f.currentPassword.value });
     busy(f.querySelector('button[type="submit"]'), async () => {

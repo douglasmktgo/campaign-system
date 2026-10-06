@@ -25,6 +25,7 @@ const EMPTY = () => ({
   proposals: [],
   research: [],
   activity: [],
+  plan: { timezone: "America/Sao_Paulo", slots: [], reviews: [], summaries: {} },
 });
 
 let db = load();
@@ -33,7 +34,7 @@ function load() {
   try {
     const data = JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
     const base = EMPTY();
-    return { ...base, ...data, settings: { ...base.settings, ...data.settings } };
+    return { ...base, ...data, settings: { ...base.settings, ...data.settings }, plan: { ...base.plan, ...data.plan } };
   } catch {
     const fresh = EMPTY();
     write(fresh);
