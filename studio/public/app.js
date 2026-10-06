@@ -1,4 +1,4 @@
-// Studio — interfaz. JavaScript plano, sin compilación.
+// Taskday — interfaz. JavaScript plano, sin compilación.
 
 // ------------------------------------------------------------------ iconos
 const ICONS = {
@@ -34,6 +34,9 @@ const ICONS = {
   doc: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
   stories: '<circle cx="12" cy="12" r="9" stroke-dasharray="3.5 2.5"/><circle cx="12" cy="12" r="4.5"/>',
   inbox: '<path d="M3 13h5l1.5 3h5l1.5-3h5"/><path d="M5 5h14l2 8v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6z"/>',
+  moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
+  more: '<circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="19" cy="12" r="1.3" fill="currentColor"/>',
 };
 const icon = (name, extra = "") =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" ${extra}>${ICONS[name] || ""}</svg>`;
@@ -160,13 +163,19 @@ const state = {
   calMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   agentReply: null,
   agentProposals: [],
+  homeDay: "",
 };
 
 const accountById = (id) => state.data?.accounts.find((a) => a.id === id);
 const postById = (id) => state.data?.posts.find((p) => p.id === id);
 const pendingProposals = () => (state.data?.proposals || []).filter((p) => p.status === "pending" && postById(p.postId));
 const reviewPosts = () => (state.data?.posts || []).filter((p) => p.status === "review");
-const approvalCount = () => pendingProposals().length + reviewPosts().length;
+// Propuestas del plan desde hoy: también esperan tu visto bueno.
+const planProposals = () => {
+  const t = planToday();
+  return (state.data?.plan?.slots || []).filter((s) => s.status === "proposed" && s.date >= t).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+};
+const approvalCount = () => pendingProposals().length + reviewPosts().length + planProposals().length;
 
 async function refresh() {
   state.data = await api("/state");
@@ -174,15 +183,18 @@ async function refresh() {
 
 // ------------------------------------------------------------------ navegación
 const NAV = [
-  { id: "home", label: "Inicio", icon: "home" },
+  { id: "home", label: "Hoy", icon: "home" },
   { id: "plan", label: "Plan", icon: "calendar" },
-  { id: "approvals", label: "Aprobaciones", icon: "inbox" },
-  { id: "research", label: "Investigación", icon: "flask" },
+  { id: "approvals", label: "Aprobaciones", short: "Aprobar", icon: "inbox" },
   { id: "library", label: "Artes", icon: "grid" },
   { id: "calendar", label: "Calendario", icon: "clock" },
+  { id: "research", label: "Investigación", icon: "flask" },
   { id: "accounts", label: "Cuentas", icon: "instagram" },
   { id: "settings", label: "Ajustes", icon: "gear" },
 ];
+const TOP_NAV = ["home", "plan", "approvals", "library", "calendar", "research"];
+const TAB_NAV = ["home", "plan", "approvals", "library"];
+const navById = (id) => NAV.find((n) => n.id === id);
 
 function go(view) {
   state.view = view;
@@ -194,6 +206,33 @@ window.addEventListener("hashchange", () => {
   const v = location.hash.slice(1);
   if (v && v !== state.view) go(v);
 });
+
+// ------------------------------------------------------------------ tema claro / oscuro (uno solo botón: luna ↔ sol)
+const isDark = () => document.documentElement.dataset.theme === "dark";
+const themeBtn = () =>
+  `<button class="icon-btn" data-action="theme" title="${isDark() ? "Modo claro" : "Modo oscuro"}" aria-label="${isDark() ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}">${icon(isDark() ? "sun" : "moon")}</button>`;
+function toggleTheme() {
+  const next = isDark() ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try {
+    localStorage.setItem("theme", next);
+  } catch {
+    // sin almacenamiento: el tema dura hasta recargar
+  }
+  document.querySelectorAll('[data-action="theme"]').forEach((b) => (b.outerHTML = themeBtn()));
+}
+
+function openMore() {
+  openSheet(`
+    <div class="sheet sheet-sm more-menu">
+      <div class="sheet-head"><h2>Más</h2><button class="btn btn-icon" data-close aria-label="Cerrar">${icon("x")}</button></div>
+      <div class="more-list">
+        ${["calendar", "research", "accounts", "settings"].map((id) => `<button class="more-item" data-go="${id}">${icon(navById(id).icon)}<span>${navById(id).label}</span>${icon("right")}</button>`).join("")}
+        <button class="more-item" data-action="new-post">${icon("plus")}<span>Nuevo arte</span>${icon("right")}</button>
+        <button class="more-item" data-action="logout">${icon("logout")}<span>Cerrar sesión</span></button>
+      </div>
+    </div>`);
+}
 
 // ------------------------------------------------------------------ render raíz
 function render() {
@@ -212,22 +251,27 @@ function render() {
     return;
   }
   const count = approvalCount();
-  const navBtn = (n, cls) =>
-    `<button class="${cls} ${state.view === n.id ? "active" : ""}" data-go="${n.id}">${icon(n.icon)}<span>${n.label}</span>${
-      n.id === "approvals" && count ? `<span class="badge">${count}</span>` : ""
-    }</button>`;
+  const badge = (id) => (id === "approvals" && count ? `<span class="badge">${count}</span>` : "");
+  const inMore = !TAB_NAV.includes(state.view);
   app.innerHTML = `
     <div class="shell">
-      <aside class="sidebar">
-        <div class="brand"><div class="brand-mark">${icon("instagram", 'style="width:18px;height:18px"')}</div>Studio</div>
-        ${NAV.map((n) => navBtn(n, "nav-item")).join("")}
-        <div class="sidebar-foot">
-          <button class="btn btn-primary" style="width:100%" data-action="new-post">${icon("plus")}Nuevo arte</button>
-          <button class="nav-item" style="margin-top:8px" data-action="logout">${icon("logout")}<span>Cerrar sesión</span></button>
+      <header class="topbar">
+        <button class="brand" data-go="home"><span class="brand-mark"><i></i></span>Taskday</button>
+        <nav class="topnav">${TOP_NAV.map((id) => `<button class="${state.view === id ? "on" : ""}" data-go="${id}">${navById(id).label}${badge(id)}</button>`).join("")}</nav>
+        <div class="top-actions">
+          <button class="icon-btn hide-m ${state.view === "accounts" ? "on" : ""}" data-go="accounts" title="Cuentas" aria-label="Cuentas">${icon("instagram")}</button>
+          ${themeBtn()}
+          <button class="icon-btn hide-m ${state.view === "settings" ? "on" : ""}" data-go="settings" title="Ajustes" aria-label="Ajustes">${icon("gear")}</button>
+          <button class="icon-btn hide-m" data-action="logout" title="Cerrar sesión" aria-label="Cerrar sesión">${icon("logout")}</button>
+          <button class="icon-btn show-m" data-action="new-post" title="Nuevo arte" aria-label="Nuevo arte">${icon("plus")}</button>
+          <button class="btn btn-primary hide-m" data-action="new-post">${icon("plus")}Nuevo arte</button>
         </div>
-      </aside>
+      </header>
       <main class="main" id="view">${viewHtml()}</main>
-      <nav class="tabbar">${NAV.map((n) => navBtn(n, "")).join("")}</nav>
+      <nav class="tabbar">
+        ${TAB_NAV.map((id) => `<button class="${state.view === id ? "active" : ""}" data-go="${id}">${icon(navById(id).icon)}<span>${navById(id).short || navById(id).label}</span>${badge(id)}</button>`).join("")}
+        <button class="${inMore ? "active" : ""}" data-action="more">${icon("more")}<span>Más</span></button>
+      </nav>
     </div>`;
 }
 
@@ -238,7 +282,7 @@ function rerenderView() {
   if (el.contains(document.activeElement) && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
   el.innerHTML = viewHtml();
   const count = approvalCount();
-  document.querySelectorAll('.nav-item[data-go="approvals"], .tabbar [data-go="approvals"]').forEach((b) => {
+  document.querySelectorAll('.topnav [data-go="approvals"], .tabbar [data-go="approvals"]').forEach((b) => {
     b.querySelector(".badge")?.remove();
     if (count) b.insertAdjacentHTML("beforeend", `<span class="badge">${count}</span>`);
   });
@@ -255,8 +299,8 @@ function authView() {
   return `
     <div class="auth">
       <form class="auth-card" id="auth-form">
-        <div class="brand-mark">${icon("instagram")}</div>
-        <h1>${setup ? "Bienvenido a Studio" : "Studio"}</h1>
+        <div class="brand-mark"><i></i></div>
+        <h1>${setup ? "Bienvenido a Taskday" : "Taskday"}</h1>
         <p>${setup ? "Crea una contraseña para proteger tus cuentas." : "Introduce tu contraseña para continuar."}</p>
         <input class="input" type="password" name="password" placeholder="Contraseña" autocomplete="${setup ? "new-password" : "current-password"}" autofocus required minlength="${setup ? 8 : 1}">
         <button class="btn btn-primary btn-lg" type="submit">${setup ? "Crear y entrar" : "Entrar"}</button>
@@ -277,7 +321,78 @@ function bindAuth() {
   });
 }
 
-// ------------------------------------------------------------------ Inicio
+// ------------------------------------------------------------------ flujo de cada pieza del plan
+// Propuesta → Aprobar → Crear borrador → Subir arte → Programar → Publicado.
+const STEPS = ["Aprobar", "Borrador", "Arte", "Programar", "Publicado"];
+const FORMAT_NOUN = { REEL: "el reel", CARRUSEL: "el carrusel", POST: "el post", STORIES: "las stories" };
+const de = (name) => (name.startsWith("el ") ? "del " + name.slice(3) : "de " + name);
+const MILESTONE = { date: "2026-10-20", label: "Días hasta el 20/10" };
+
+// Devuelve el paso actual (0–4; 5 = terminado), qué botón toca y la frase de la tarea.
+function slotFlow(s) {
+  const post = s.postId ? postById(s.postId) : null;
+  const noun = FORMAT_NOUN[s.format] || "la pieza";
+  const name = `${noun} «${s.theme || "sin tema"}»`;
+  if (s.status === "published" || post?.status === "published") return { step: 5, done: true, label: "Publicada" };
+  if (s.status === "skipped") return { step: 0, label: "Descartada" };
+  if (s.status === "proposed") return { step: 0, act: "approve", label: "Aprobar", todo: `Aprueba ${name}` };
+  if (s.format === "STORIES") return { step: 2, act: "slot", label: "Hacer", todo: `Haz ${name} y márcalas como publicadas` };
+  if (!post) return { step: 1, act: "draft", label: "Crear borrador", todo: `Crea el borrador ${de(name)}` };
+  if (post.status === "idea" || !post.media.length) {
+    const verb = s.format === "REEL" ? "Graba y sube" : "Diseña y sube";
+    return { step: 2, act: "post", label: "Subir arte", todo: `${verb} ${name}` };
+  }
+  if (post.status === "review") return { step: 3, act: "post", label: "Validar", todo: `Valida el arte ${de(name)}` };
+  if (post.status === "approved") return { step: 3, act: "post", label: "Programar", todo: `Programa ${name}` };
+  if (post.status === "rejected" || post.status === "failed") return { step: 3, act: "post", label: "Revisar", todo: `Revisa ${name}: ${post.status === "failed" ? "falló al publicar" : "está rechazado"}` };
+  if (post.status === "scheduled") return { step: 4, label: `Programada · ${fmtDate(post.scheduledAt, { month: undefined })}` };
+  return { step: 4, label: "Publicando…" };
+}
+
+function stepsHtml(f) {
+  return `<div class="fsteps">${STEPS.map((l, i) => `<span class="fstep ${i < f.step ? "done" : i === f.step ? "now" : ""}"><i>${i < f.step ? "✓" : i + 1}</i>${l}</span>`).join("")}</div>`;
+}
+const nextBtn = (s, f, cls = "btn-xs") =>
+  f.act ? `<button class="btn btn-primary ${cls}" data-slot-next="${s.id}">${f.act === "approve" ? icon("check") : ""}${f.label}</button>` : `<span class="slot-state">${esc(f.label)}</span>`;
+
+// Tarjetas con algo que hacer (desde hace una semana), de la más urgente a la menos.
+function planTasks() {
+  const from = pAddDays(planToday(), -7);
+  return (state.data.plan?.slots || [])
+    .filter((s) => s.date >= from && !["skipped", "published"].includes(s.status))
+    .map((s) => ({ s, f: slotFlow(s) }))
+    .filter((x) => x.f.act)
+    .sort((a, b) => (a.s.date + a.s.time).localeCompare(b.s.date + b.s.time));
+}
+function whenLabel(date) {
+  const t = planToday();
+  if (date < t) return `atrasada · era el ${pDay(date, { weekday: "short", day: "numeric" })}`;
+  if (date === t) return "para hoy";
+  if (date === pAddDays(t, 1)) return "para mañana";
+  return `para el ${pDay(date, { weekday: "long", day: "numeric" })}`;
+}
+const fmtName = (s) => (FORMAT_UI[s.format] || FORMAT_UI.POST)[0];
+
+function dayPillsHtml(from, sel, slots, attr) {
+  const today = planToday();
+  return `<div class="daypills">${[0, 1, 2, 3, 4, 5, 6].map((i) => {
+    const d = pAddDays(from, i);
+    const dots = slots.filter((s) => s.date === d && s.status !== "skipped").slice(0, 3).map((s) => `<span class="d-${s.format}"></span>`).join("");
+    return `<button class="dp ${d === sel ? "sel" : ""} ${d === today ? "today" : ""} ${d < today ? "past" : ""}" ${attr}="${d}"><small>${WEEKDAYS[i]}</small><b>${Number(d.slice(8))}</b><span class="dots">${dots}</span></button>`;
+  }).join("")}</div>`;
+}
+
+function agendaRow(s) {
+  const f = slotFlow(s);
+  const multi = state.data.accounts.length > 1;
+  return `<div class="ag f-${s.format} st-${s.status} ${f.done ? "done" : ""}" data-plan-open="${s.id}" role="button" tabindex="0">
+      <span class="ag-time">${esc(s.time)}</span>
+      <span class="ag-main"><strong>${esc(s.theme || "Sin tema")}</strong><small>${pDay(s.date, { weekday: "short", day: "numeric" })} · ${fmtName(s)}${multi ? ` · @${esc(accountById(s.accountId)?.username || "—")}` : ""}${s.production ? ` · ${esc(s.production.slice(0, 48))}` : ""}</small></span>
+      ${nextBtn(s, f)}
+    </div>`;
+}
+
+// ------------------------------------------------------------------ Hoy
 function greeting() {
   const h = new Date().getHours();
   return h < 12 ? "Buenos días" : h < 20 ? "Buenas tardes" : "Buenas noches";
@@ -294,62 +409,145 @@ function accountAlertsHtml() {
       return "";
     })
     .filter(Boolean)
-    .map((t) => `<div class="note note-warn" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px"><div style="flex:1;min-width:200px">${t}</div><button class="btn" data-go="accounts">Ir a Cuentas</button></div>`)
+    .map((t) => `<div class="note note-warn" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><div style="flex:1;min-width:200px">${t}</div><button class="btn" data-go="accounts">Ir a Cuentas</button></div>`)
     .join("");
+}
+
+function heroHtml() {
+  const tasks = planTasks();
+  const top = tasks[0];
+  const tomorrow = pAddDays(planToday(), 1);
+  const reviews = reviewPosts().filter((p) => !(p.planSlotId && slotById(p.planSlotId)));
+  const props = pendingProposals();
+  // 1) Lo del plan que vence hoy o mañana (o atrasado).
+  if (top && top.s.date <= tomorrow) return heroSlot(top, tasks);
+  // 2) Artes subidos a mano o propuestas del agente: no tienen fecha, van ya.
+  if (reviews.length) {
+    const p = reviews[0];
+    return `<div class="hero">
+        <span class="kicker">${icon("spark")}Lo siguiente · validar arte</span>
+        <h2>Valida el arte «${esc(p.title)}»</h2>
+        <div class="hero-meta"><span>${TYPE_LABEL[p.type]}</span><span>${p.accountId ? "@" + esc(accountById(p.accountId)?.username || "—") : "Sin cuenta"}</span>${reviews.length > 1 ? `<span>+${reviews.length - 1} más por validar</span>` : ""}</div>
+        <div class="hero-acts"><button class="btn btn-primary btn-lg" data-open="${p.id}">${icon("check")}Revisar y aprobar</button></div>
+      </div>`;
+  }
+  if (props.length) {
+    const pr = props[0];
+    return `<div class="hero">
+        <span class="kicker">${icon("spark")}Lo siguiente · propuesta del agente</span>
+        <h2>${KIND[pr.kind].label}: «${esc(postById(pr.postId)?.title || "")}»</h2>
+        <div class="hero-meta"><span>${esc(pr.reason || "")}</span></div>
+        <div class="hero-acts"><button class="btn btn-primary btn-lg" data-proposal-approve="${pr.id}">${icon("check")}${KIND[pr.kind].verb}</button><button class="btn btn-soft btn-lg" data-go="approvals">Ver todas</button></div>
+      </div>`;
+  }
+  // 3) Lo siguiente del plan aunque falten días.
+  if (top) return heroSlot(top, tasks);
+  return `<div class="hero calm">
+      <span class="kicker">${icon("checkCircle")}Todo al día</span>
+      <h2>No hay nada pendiente. Planifica lo que viene.</h2>
+      <div class="hero-acts"><button class="btn btn-primary btn-lg" data-go="plan">${icon("calendar")}Abrir el plan</button><button class="btn btn-soft btn-lg" data-action="new-post">${icon("plus")}Nuevo arte</button></div>
+    </div>`;
+}
+function heroSlot({ s, f }, tasks) {
+  const late = s.date < planToday();
+  const after = tasks.filter((x) => x.s.id !== s.id).slice(0, 2);
+  return `<div class="hero">
+      <span class="kicker ${late ? "late" : ""}">${icon(late ? "warn" : "spark")}Lo siguiente · ${whenLabel(s.date)}</span>
+      <h2>${esc(f.todo)}</h2>
+      <div class="hero-meta"><span>${pDay(s.date, { weekday: "short", day: "numeric" })} · ${esc(s.time)}</span><span>${fmtName(s)}</span>${s.goal ? `<span>Objetivo: ${esc((GOAL_UI[s.goal] || s.goal).toLowerCase())}</span>` : ""}${s.phase ? `<span>${esc(s.phase)}</span>` : ""}${state.data.accounts.length > 1 ? `<span>@${esc(accountById(s.accountId)?.username || "—")}</span>` : ""}</div>
+      <div class="hero-acts">${nextBtn(s, f, "btn-lg")}<button class="btn btn-soft btn-lg" data-plan-open="${s.id}">Ver ficha</button></div>
+      ${stepsHtml(f)}
+      ${after.length ? `<div class="hero-after">Después: ${after.map((x) => `<b>${esc(x.f.label)}</b> ${esc(x.s.theme || "")} (${pDay(x.s.date, { weekday: "short", day: "numeric" })})`).join(" · ")}</div>` : ""}
+    </div>`;
+}
+
+function countersHtml() {
+  const d = state.data;
+  const slots = d.plan?.slots || [];
+  const scheduled = d.posts.filter((p) => p.status === "scheduled").length;
+  const published = slots.filter((s) => s.status === "published").length + d.posts.filter((p) => p.status === "published" && !(p.planSlotId && slotById(p.planSlotId)?.status === "published")).length;
+  const t = planToday();
+  const left = Math.round((Date.parse(MILESTONE.date) - Date.parse(t)) / 86400000);
+  const upcoming = slots.filter((s) => s.date >= t && !["skipped", "published"].includes(s.status)).length;
+  const c = (cls, n, label, view) => `<button class="counter ${cls}" data-go="${view}"><span class="n">${n}</span><span class="l">${label}</span></button>`;
+  return `<div class="counters">
+      ${c("c-oro", approvalCount(), "Por aprobar", "approvals")}
+      ${c("c-vio", scheduled, "Programados", "calendar")}
+      ${c("c-lima", published, "Publicados", "plan")}
+      ${left >= 0 ? c("c-ink", left, MILESTONE.label, "plan") : c("c-ink", upcoming, "En el plan", "plan")}
+    </div>`;
+}
+
+// «Cómo va la semana»: cada pieza en la columna de su paso.
+function flowLaneHtml() {
+  const from = pWeekStart(planToday());
+  const to = pAddDays(from, 6);
+  const week = (state.data.plan?.slots || []).filter((s) => s.date >= from && s.date <= to && s.status !== "skipped").sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  if (!week.length) return "";
+  const cols = STEPS.map(() => []);
+  for (const s of week) cols[Math.min(slotFlow(s).step, 4)].push(s);
+  const hints = ["Nada por aprobar.", "Aprueba una tarjeta y crea su borrador.", "Graba o diseña y súbelo al borrador.", "Arte validado → elige la hora.", "Aún nada publicado esta semana."];
+  return `<div class="lane">
+      <div class="lane-head"><h3>Cómo va la semana</h3><span class="muted small">cada pieza avanza de izquierda a derecha</span></div>
+      <div class="flow">${cols.map((list, i) => `
+        <div class="fcol"><div class="fcol-h">${i + 1} · ${STEPS[i]}<span>${list.length}</span></div>
+          ${list.slice(0, 3).map((s) => `<button class="mini ${i === 4 ? (slotFlow(s).done ? "done" : "f-" + s.format) : "f-" + s.format}" data-plan-open="${s.id}">${esc(s.theme || "Sin tema")}<small>${pDay(s.date, { weekday: "short", day: "numeric" })} · ${esc(s.time)}${slotFlow(s).done ? " ✓" : ""}</small></button>`).join("") || `<div class="muted">${hints[i]}</div>`}
+          ${list.length > 3 ? `<div class="more">+${list.length - 3} más</div>` : ""}
+        </div>`).join("")}</div>
+    </div>`;
+}
+
+function weekCardHtml() {
+  const t = planToday();
+  const from = pWeekStart(t);
+  const sel = state.homeDay && state.homeDay >= from && state.homeDay <= pAddDays(from, 6) ? state.homeDay : t;
+  const all = (state.data.plan?.slots || []).filter((s) => s.status !== "skipped").sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  const day = all.filter((s) => s.date === sel);
+  const next = all.filter((s) => s.date > sel && s.status !== "published").slice(0, 3);
+  const dayName = sel === t ? "Hoy" : pDay(sel, { weekday: "long", day: "numeric" });
+  let body;
+  if (day.length) body = `<div class="agenda-label">${dayName[0].toUpperCase() + dayName.slice(1)}</div>${day.map(agendaRow).join("")}`;
+  else body = `<div class="agenda-label">${sel === t ? "Hoy no se publica nada." : "Nada planificado este día."}${next.length ? " Lo próximo:" : ""}</div>${next.map(agendaRow).join("")}`;
+  return `<div class="card">
+      <h3 class="side-h">Esta semana</h3>
+      ${dayPillsHtml(from, sel, all, "data-home-day")}
+      <div class="agenda">${body || ""}</div>
+    </div>`;
+}
+
+function activityHtml() {
+  const d = state.data;
+  const scheduled = d.posts.filter((p) => p.status === "scheduled").sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
+  return `${scheduled.length ? `<div class="card">
+        <h3 class="side-h">${icon("clock")}Programado</h3>
+        ${scheduled.slice(0, 4).map((p) => `<div class="list-row" data-open="${p.id}">${thumb(p)}<div class="row-main"><div class="row-title">${esc(p.title)}</div><div class="row-sub">${fmtDate(p.scheduledAt)} · @${esc(accountById(p.accountId)?.username || "—")}</div></div></div>`).join("")}
+      </div>` : ""}
+      <div class="card">
+        <h3 class="side-h">Actividad reciente</h3>
+        ${d.activity.length ? d.activity.slice(0, 6).map((a) => `<div class="activity-item ${a.kind}"><span class="dot"></span><div style="flex:1">${esc(a.text)}<div class="muted small">${relative(a.at)}</div></div></div>`).join("") : `<p class="muted small" style="margin:0">Aquí verás todo lo que pasa.</p>`}
+      </div>`;
 }
 
 function homeView() {
   const d = state.data;
-  const scheduled = d.posts.filter((p) => p.status === "scheduled").sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
-  const weekAgo = Date.now() - 7 * 86400000;
-  const published = d.posts.filter((p) => p.status === "published" && Date.parse(p.publishedAt) > weekAgo);
-  const stat = (num, label, ic, color, view) => `
-    <div class="card stat" data-go="${view}">
-      <div class="stat-icon" style="background:var(--${color}-soft);color:var(--${color})">${icon(ic)}</div>
-      <div class="stat-num">${num}</div><div class="stat-label">${label}</div>
-    </div>`;
-  const noAccounts = !d.accounts.length;
+  const acc = d.accounts.length === 1 ? ` · @${esc(d.accounts[0].username)}` : "";
   return `
     <div class="page-head">
       <div>
         <h1 class="page-title">${greeting()}</h1>
-        <p class="page-sub">${new Date().toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long" })}</p>
+        <p class="page-sub">${new Date().toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long" })}${acc}</p>
       </div>
-      <button class="btn btn-primary" data-action="new-post">${icon("plus")}Nuevo arte</button>
     </div>
-
-    ${noAccounts ? `
+    ${!d.accounts.length ? `
       <div class="card" style="display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap">
         <div class="stat-icon" style="margin:0;background:var(--accent-soft);color:var(--accent)">${icon("instagram")}</div>
         <div style="flex:1;min-width:200px"><strong>Conecta tu primera cuenta de Instagram</strong><div class="muted small">O empieza con una cuenta de prueba para ver cómo funciona todo.</div></div>
         <button class="btn btn-primary" data-go="accounts">Conectar</button>
       </div>` : ""}
-
     ${accountAlertsHtml()}
-    ${composerHtml()}
-    ${planTodayHtml()}
-
-    <div class="grid grid-3 stats" style="margin-top:16px">
-      ${stat(approvalCount(), "Esperan tu aprobación", "inbox", "orange", "approvals")}
-      ${stat(scheduled.length, "Programados", "clock", "purple", "calendar")}
-      ${stat(published.length, "Publicados esta semana", "checkCircle", "green", "library")}
-    </div>
-
-    <div class="grid grid-2" style="margin-top:16px">
-      <div class="card">
-        <h3 style="margin:0 0 6px;font-size:17px">Próximas publicaciones</h3>
-        ${scheduled.length ? scheduled.slice(0, 5).map((p) => `
-          <div class="list-row" data-open="${p.id}">
-            ${thumb(p)}
-            <div class="row-main"><div class="row-title">${esc(p.title)}</div>
-            <div class="row-sub">${fmtDate(p.scheduledAt)} · @${esc(accountById(p.accountId)?.username || "—")}</div></div>
-          </div>`).join("") : `<p class="muted small">Nada programado todavía. Aprueba un arte y elige cuándo publicarlo.</p>`}
-      </div>
-      <div class="card">
-        <h3 style="margin:0 0 6px;font-size:17px">Actividad reciente</h3>
-        ${d.activity.length ? d.activity.slice(0, 7).map((a) => `
-          <div class="activity-item ${a.kind}"><span class="dot"></span><div style="flex:1">${esc(a.text)}<div class="muted small">${relative(a.at)}</div></div></div>`).join("") : `<p class="muted small">Aquí verás todo lo que pasa.</p>`}
-      </div>
+    <div class="home">
+      <div class="home-main">${heroHtml()}${countersHtml()}${flowLaneHtml()}</div>
+      <aside class="home-side">${weekCardHtml()}${composerHtml()}${activityHtml()}</aside>
     </div>`;
 }
 
@@ -385,6 +583,8 @@ const KIND = {
   unschedule: { label: "Desprogramar", verb: "Desprogramar" },
 };
 
+const TYPE_FORMAT = { IMAGE: "POST", CAROUSEL: "CARRUSEL", REELS: "REEL" };
+
 function proposalCard(pr) {
   const post = postById(pr.postId);
   if (!post) return "";
@@ -395,21 +595,21 @@ function proposalCard(pr) {
     : pr.kind === "unschedule" ? `Programado para ${post.scheduledAt ? fmtDate(post.scheduledAt) : "—"}`
     : "Reemplaza el texto actual";
   return `
-    <div class="card" style="box-shadow:none;border:1px solid var(--line)">
-      <div class="approval">
-        <div data-open="${post.id}" style="cursor:pointer">${thumb(post)}</div>
+    <div class="ap-card">
+      <div class="ap-art">
+        <div class="ap-thumb" data-open="${post.id}">${thumb(post, "thumb")}</div>
         <div class="row-main">
-          <div class="approval-kind">${icon("spark", 'style="width:12px;height:12px;vertical-align:-1px"')} ${KIND[pr.kind].label}</div>
-          <div class="approval-title">${esc(post.title)}</div>
+          <div class="approval-kind">${icon("spark")}${KIND[pr.kind].label}</div>
+          <h4>${esc(post.title)}</h4>
           <div class="row-sub">${detail}</div>
-          <div class="row-sub" style="margin-top:4px">${esc(pr.reason)}</div>
-        </div>
-        <div class="approval-actions">
-          <button class="btn" data-proposal-reject="${pr.id}">Rechazar</button>
-          <button class="btn btn-primary" data-proposal-approve="${pr.id}">${icon("check")}${KIND[pr.kind].verb}</button>
         </div>
       </div>
+      ${pr.reason ? `<div class="ap-why">${esc(pr.reason)}</div>` : ""}
       ${pr.kind === "update_caption" ? `<div class="quote">${esc(pr.caption)}</div>` : ""}
+      <div class="ap-acts">
+        <button class="btn btn-primary" data-proposal-approve="${pr.id}">${icon("check")}${KIND[pr.kind].verb}</button>
+        <button class="btn btn-ghost-danger" data-proposal-reject="${pr.id}">Rechazar</button>
+      </div>
     </div>`;
 }
 
@@ -418,38 +618,73 @@ function reviewCard(post) {
   const errors = post.checks.filter((c) => c.level === "error").length;
   const warns = post.checks.filter((c) => c.level === "warn").length;
   const r = post.aiReview;
+  const fmt = TYPE_FORMAT[post.type] || "POST";
   return `
-    <div class="card">
-      <div class="approval">
-        <div data-open="${post.id}" style="cursor:pointer">${thumb(post)}</div>
+    <div class="ap-card">
+      <div class="ap-art">
+        <div class="ap-thumb" data-open="${post.id}">${thumb(post, "thumb")}</div>
         <div class="row-main">
-          <div class="approval-kind" style="color:var(--orange)">Validar arte · ${TYPE_LABEL[post.type]}</div>
-          <div class="approval-title">${esc(post.title)}</div>
-          <div class="row-sub">${acc ? "@" + esc(acc.username) : "Sin cuenta asignada"} · subido ${relative(post.createdAt)}</div>
-          <div class="row-sub" style="margin-top:6px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-            ${errors ? `<span style="color:var(--red)">${errors} ${errors === 1 ? "error" : "errores"}</span>` : warns ? `<span style="color:var(--orange)">${warns} ${warns === 1 ? "aviso" : "avisos"}</span>` : `<span style="color:var(--green)">Requisitos OK</span>`}
+          <div class="ap-tags"><span class="ftag ft-${fmt}">${icon(TYPE_ICON[post.type])}${TYPE_LABEL[post.type]}</span><span class="tag tag-soft">${acc ? "@" + esc(acc.username) : "Sin cuenta"}</span></div>
+          <h4>${esc(post.title)}</h4>
+          <div class="ap-checks">
+            ${errors ? `<span style="color:var(--red)">● ${errors} ${errors === 1 ? "error" : "errores"} de validación</span>` : warns ? `<span style="color:var(--orange)">● ${warns} ${warns === 1 ? "aviso" : "avisos"}</span>` : `<span style="color:var(--green)">● Requisitos de Instagram OK</span>`}
             ${r?.pending ? `<span><span class="spinner" style="width:12px;height:12px;vertical-align:-1px"></span> IA revisando…</span>` : r?.score != null ? `<span>IA ${scoreBadge(r)}</span>` : ""}
+            <span class="muted">Subido ${relative(post.createdAt)}</span>
           </div>
         </div>
-        <div class="approval-actions">
-          <button class="btn btn-primary" data-open="${post.id}">Revisar</button>
+      </div>
+      <div class="ap-acts"><button class="btn btn-primary" data-open="${post.id}">${icon("check")}Revisar y aprobar</button></div>
+    </div>`;
+}
+
+function planProposalCard(s) {
+  const [fl, fi] = FORMAT_UI[s.format] || FORMAT_UI.POST;
+  const multi = state.data.accounts.length > 1;
+  return `
+    <div class="ap-card">
+      <div class="ap-top">
+        <div class="ap-date f-${s.format}"><small>${pDay(s.date, { weekday: "short" })}</small><b>${Number(s.date.slice(8))}</b></div>
+        <div class="row-main">
+          <div class="ap-tags"><span class="ftag ft-${s.format}">${icon(fi)}${fl}</span><span class="tag tag-soft">${esc(s.time)}</span>${s.goal ? `<span class="tag tag-soft">${esc(GOAL_UI[s.goal] || s.goal)}</span>` : ""}${multi ? `<span class="tag tag-soft">@${esc(accountById(s.accountId)?.username || "—")}</span>` : ""}</div>
+          <h4>${esc(s.theme || "Sin tema")}</h4>
         </div>
+      </div>
+      ${s.hook ? `<div class="ap-hook">“${esc(s.hook.trim().replace(/^["“”]+|["“”]+$/g, ""))}”</div>` : ""}
+      ${s.why ? `<div class="ap-why"><strong>Por qué:</strong> ${esc(s.why)}</div>` : s.production ? `<div class="ap-why"><strong>Producción:</strong> ${esc(s.production)}</div>` : ""}
+      <div class="ap-acts">
+        <button class="btn btn-primary" data-plan-approve="${s.id}">${icon("check")}Aprobar</button>
+        <button class="btn" data-plan-open="${s.id}">Cambiar</button>
+        <button class="btn btn-ghost-danger" data-plan-skip="${s.id}">Descartar</button>
       </div>
     </div>`;
 }
 
+const apState = { tab: "all" };
 function approvalsView() {
   const props = pendingProposals();
   const reviews = reviewPosts();
+  const plans = planProposals();
+  const total = props.length + reviews.length + plans.length;
+  const tabs = [["all", "Todo", total], ["plan", "Plan", plans.length], ["arts", "Artes", reviews.length], ["agent", "Agente", props.length]];
+  const show = (k) => apState.tab === "all" || apState.tab === k;
+  const section = (k, title, list, card) =>
+    show(k) && list.length ? `<div class="section-title">${title} <span class="count">${list.length}</span></div><div class="ap-list">${list.map(card).join("")}</div>` : "";
+  const shown = (show("plan") ? plans.length : 0) + (show("arts") ? reviews.length : 0) + (show("agent") ? props.length : 0);
   return `
     <div class="page-head"><div>
       <h1 class="page-title">Aprobaciones</h1>
       <p class="page-sub">Nada se publica ni cambia sin tu visto bueno.</p>
     </div></div>
-    ${!props.length && !reviews.length ? `
-      <div class="card empty">${icon("checkCircle")}<h3>Todo al día</h3><p>No hay nada esperando tu aprobación.</p></div>` : ""}
-    ${props.length ? `<div class="section-title" style="margin-top:0">Propuestas del agente <span class="count">${props.length}</span></div>${props.map(proposalCard).join("")}` : ""}
-    ${reviews.length ? `<div class="section-title">Artes por validar <span class="count">${reviews.length}</span></div>${reviews.map(reviewCard).join("")}` : ""}`;
+    <div class="ap-tabs">${tabs.map(([k, l, n]) => `<button class="${apState.tab === k ? "on" : ""}" data-ap-tab="${k}">${l}<span>${n}</span></button>`).join("")}</div>
+    ${!shown ? `<div class="card empty">${icon("checkCircle")}<h3>Todo al día</h3><p>No hay nada esperando tu aprobación${apState.tab === "all" ? "" : " aquí"}.</p></div>` : ""}
+    ${show("plan") && plans.length > 1 ? `
+      <div class="bulk">
+        <div><strong>${plans.length} propuestas del plan</strong><span>Lo aprobado no lo vuelve a tocar el agente sin preguntarte.</span></div>
+        <button class="btn" data-plan-approve-all="${plans.map((s) => s.id).join(",")}">${icon("check")}Aprobar las ${plans.length}</button>
+      </div>` : ""}
+    ${section("arts", "Artes por validar", reviews, reviewCard)}
+    ${section("agent", "Propuestas del agente", props, proposalCard)}
+    ${section("plan", "Propuestas del plan", plans, planProposalCard)}`;
 }
 
 // ------------------------------------------------------------------ Artes
@@ -517,7 +752,7 @@ function calendarView() {
   const title = raw[0].toUpperCase() + raw.slice(1);
   return `
     <div class="page-head">
-      <div><h1 class="page-title">${title}</h1><p class="page-sub">Morado: programado · Verde: publicado</p></div>
+      <div><h1 class="page-title">${title}</h1><p class="page-sub">Violeta: programado · Verde: publicado</p></div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-icon" data-cal="-1" aria-label="Mes anterior">${icon("left")}</button>
         <button class="btn" data-cal="0">Hoy</button>
@@ -954,7 +1189,7 @@ const GOAL_UI = { seguidores: "Seguidores", leads: "Leads", comunidad: "Comunida
 const METRIC_UI = { views: "Reproducciones", likes: "Me gusta", comments: "Comentarios", saves: "Guardados", shares: "Compartidos", follows: "Seguidores nuevos", signups: "Registros" };
 const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
-const planState = { accountId: "", mode: "week", cursor: "" };
+const planState = { accountId: "", mode: "week", cursor: "", day: "" };
 
 const planTz = () => state.data.plan?.timezone || "America/Sao_Paulo";
 const planToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: planTz() }).format(new Date());
@@ -991,7 +1226,6 @@ function planView() {
   const slots = planSlots(acc.id);
   const today = planToday();
   const summary = state.data.plan?.summaries?.[acc.id];
-  const count = (st) => slots.filter((s) => s.status === st).length;
   const reviews = (state.data.plan?.reviews || []).filter((r) => r.accountId === acc.id && r.changes.some((c) => c.status === "pending"));
 
   // Periodo visible
@@ -1004,97 +1238,141 @@ function planView() {
   } else if (planState.mode === "week") {
     from = pWeekStart(planState.cursor);
     to = pAddDays(from, 6);
-    label = `${pDay(from, { day: "numeric", month: "short" })} – ${pDay(to, { day: "numeric", month: "short" })}`;
+    const sameMonth = from.slice(0, 7) === to.slice(0, 7);
+    label = sameMonth ? pDay(from, { month: "long", year: "numeric" }) : `${pDay(from, { month: "short" })} – ${pDay(to, { month: "short", year: "numeric" })}`;
   } else {
     from = today;
     to = "9999-12-31";
     label = "Desde hoy";
   }
-  const visible = slots.filter((s) => s.date >= from && s.date <= to && s.status !== "published");
-  const toApprove = visible.filter((s) => s.status === "proposed");
+
+  // Columna «Esta semana»: lo que toca en la semana a la vista (o la actual en mes/lista).
+  const wFrom = planState.mode === "week" ? from : pWeekStart(today);
+  const wTo = pAddDays(wFrom, 6);
+  const week = slots.filter((s) => s.date >= wFrom && s.date <= wTo && s.status !== "skipped");
+  const flows = week.map((s) => ({ s, f: slotFlow(s) }));
+  const nApprove = flows.filter((x) => x.f.act === "approve").length;
+  const nMake = flows.filter((x) => x.f.step === 1 || x.f.step === 2).length;
+  const nScheduled = flows.filter((x) => x.f.step === 4 && !x.f.done).length;
+  const nPublished = flows.filter((x) => x.f.done).length;
+  const toApprove = week.filter((s) => s.status === "proposed" && s.date >= today);
+  const isThisWeek = wFrom === pWeekStart(today);
+  const byFormat = Object.keys(FORMAT_UI).map((k) => [k, week.filter((s) => s.format === k).length]).filter(([, n]) => n);
+  const left = Math.round((Date.parse(MILESTONE.date) - Date.parse(today)) / 86400000);
+  const sentence = !week.length
+    ? "No hay nada planificado esta semana."
+    : nApprove || nMake
+      ? `Tienes <b>${nApprove} ${nApprove === 1 ? "propuesta" : "propuestas"}</b> por aprobar y <b>${nMake} ${nMake === 1 ? "pieza" : "piezas"}</b> por preparar.`
+      : "Todo lo de esta semana está listo o programado.";
+  const counter = (cls, n, l) => `<div class="counter ${cls}"><span class="n">${n}</span><span class="l">${l}</span></div>`;
 
   let body;
   if (planState.mode === "week") body = planWeekHtml(slots, from, today);
   else if (planState.mode === "month") body = planMonthHtml(slots, from, today);
-  else body = planListHtml(visible.filter((s) => s.status !== "skipped"));
+  else body = planListHtml(slots.filter((s) => s.date >= from && s.status !== "published" && s.status !== "skipped"));
 
   const published = slots.filter((s) => s.status === "published").reverse();
 
   return `
-    <div class="page-head">
-      <div><h1 class="page-title">Plan</h1><p class="page-sub">@${esc(acc.username)} · horas de Brasília (${esc(planTz())})</p></div>
-      <div class="plan-actions">
-        <button class="btn" data-plan-action="new">${icon("plus")}Tarjeta</button>
-        <button class="btn" data-plan-action="replan">${icon("spark")}Revisión semanal</button>
-        <button class="btn btn-primary" data-plan-action="generate">${icon("spark")}Proponer con IA</button>
-      </div>
-    </div>
-    ${accs.length > 1 ? `<div class="chips" style="padding:0 0 14px">${accs.map((a) => `<button class="chip ${a.id === acc.id ? "chip-on" : ""}" data-plan-account="${a.id}">@${esc(a.username)}</button>`).join("")}</div>` : ""}
-
-    <div class="grid plan-top">
-      <div class="card">
-        <div class="plan-stats">
-          ${["proposed", "approved", "modified", "published"].map((st) => `<div><span class="plan-stat-num">${count(st)}</span>${planPill(st)}</div>`).join("")}
+    <div class="plan">
+      <aside class="plan-side">
+        <h2 class="side-title">${isThisWeek ? "Esta semana" : `Semana del ${pDay(wFrom, { day: "numeric", month: "short" })}`}</h2>
+        ${accs.length > 1 ? `<div class="side-accounts">${accs.map((a) => `<button class="chip ${a.id === acc.id ? "chip-on" : ""}" data-plan-account="${a.id}">@${esc(a.username)}</button>`).join("")}</div>` : ""}
+        <div class="todo-card">
+          <p>${sentence}</p>
+          ${byFormat.length ? `<div class="tags">${byFormat.map(([k, n]) => `<span class="ftag ft-${k}">${FORMAT_UI[k][0]} ${n}</span>`).join("")}</div>` : ""}
         </div>
-        ${summary ? `<div class="plan-summary"><strong>El camino propuesto${summary.from ? ` (${pDay(summary.from, { day: "numeric", month: "short" })} – ${pDay(summary.to, { day: "numeric", month: "short" })})` : ""}:</strong> ${esc(summary.text)}</div>` : `<p class="muted small" style="margin:12px 0 0">Aún no hay plan. Pulsa «Proponer con IA» o añade tarjetas a mano.</p>`}
+        <div class="counter-stack">
+          ${counter("c-oro", nApprove, "Por aprobar")}
+          ${counter("c-rosa", nMake, "Borrador o arte por hacer")}
+          ${counter("c-vio", nScheduled, "Programadas")}
+          ${counter("c-lima", nPublished, "Publicadas")}
+          ${left >= 0 ? counter("c-ink", left, MILESTONE.label) : ""}
+        </div>
+        <div class="side-acts">
+          ${toApprove.length ? `<button class="btn btn-primary" data-plan-approve-all="${toApprove.map((s) => s.id).join(",")}">${icon("check")}Aprobar ${toApprove.length === 1 ? "la propuesta" : `las ${toApprove.length}`}</button>` : ""}
+          <button class="btn" data-plan-action="generate">${icon("spark")}Proponer con IA</button>
+          <button class="btn" data-plan-action="replan">${icon("spark")}Revisión semanal</button>
+          <button class="btn" data-plan-action="new">${icon("plus")}Añadir tarjeta</button>
+        </div>
+        ${summary ? `<details class="side-note"><summary>El camino propuesto${summary.from ? ` (${pDay(summary.from, { day: "numeric", month: "short" })} – ${pDay(summary.to, { day: "numeric", month: "short" })})` : ""}</summary><p>${esc(summary.text)}</p></details>` : `<p class="muted small">Aún no hay plan. Pulsa «Proponer con IA» o añade tarjetas a mano.</p>`}
+      </aside>
+
+      <div class="plan-main">
+        <div class="cal-top">
+          <h2>${esc(label)}</h2>
+          <div class="segmented">${[["week", "Semana"], ["month", "Mes"], ["list", "Lista"]].map(([m, l]) => `<button class="${planState.mode === m ? "on" : ""}" data-plan-mode="${m}">${l}</button>`).join("")}</div>
+          <span class="tz">@${esc(acc.username)} · hora de Brasília</span>
+          ${planState.mode !== "list" ? `<div class="cal-arrows">
+            <button class="btn btn-sm" data-plan-move="0">Hoy</button>
+            <button class="round" data-plan-move="-1" aria-label="Anterior">${icon("left")}</button>
+            <button class="round" data-plan-move="1" aria-label="Siguiente">${icon("right")}</button>
+          </div>` : ""}
+        </div>
+        ${reviews.map(reviewHtml).join("")}
+        ${body}
+        <div class="cal-legend plan-legend-row">
+          <span><i style="background:var(--violeta)"></i>Reel</span><span><i style="background:var(--lima)"></i>Carrusel</span><span><i style="background:var(--rosa)"></i>Stories</span><span><i style="background:var(--cielo)"></i>Post</span>
+          <span>· Borde punteado: propuesta sin aprobar · Apagada: publicada · El botón negro es el siguiente paso</span>
+        </div>
+
       </div>
-      <div class="card plan-legend small">
-        <strong>Cómo funciona</strong>
-        <div><span class="pill pill-review">Propuesta</span> la sugiere el agente: apruébala o cámbiala.</div>
-        <div><span class="pill pill-approved">Aprobada</span> tal cual. <span class="pill pill-scheduled">Modificada</span> aprobada con tus cambios.</div>
-        <div>«Crear borrador» la lleva a Artes con su brief; al aprobar el arte, se propone su hora.</div>
+
+      <div class="plan-extra">
+        <div class="section-title">Ya publicado <span class="count">${published.length}</span>
+          <button class="btn btn-ghost" style="margin-left:auto" data-plan-action="published">${icon("plus")}Registrar publicado</button></div>
+        ${published.length ? `<div class="card plan-published">${published.map(publishedRow).join("")}</div>` : `<div class="card muted small">Registra lo que ya salió (con su enlace y, si quieres, sus números): el agente lo usa para no repetir y para ver qué funciona.</div>`}
+
+        <div class="plan-foot small muted">
+          <a href="/api/plan/export?accountId=${acc.id}" download>Exportar plan (JSON)</a> ·
+          <label class="link-like">Importar plan<input type="file" accept="application/json,.json" id="plan-import" hidden></label>
+        </div>
       </div>
-    </div>
-
-    ${reviews.map(reviewHtml).join("")}
-
-    <div class="toolbar plan-toolbar">
-      <div class="segmented">${[["week", "Semana"], ["month", "Mes"], ["list", "Lista"]].map(([m, l]) => `<button class="${planState.mode === m ? "on" : ""}" data-plan-mode="${m}">${l}</button>`).join("")}</div>
-      ${planState.mode !== "list" ? `<div class="plan-nav">
-        <button class="btn btn-icon" data-plan-move="-1" aria-label="Anterior">${icon("left")}</button>
-        <button class="btn" data-plan-move="0">Hoy</button>
-        <button class="btn btn-icon" data-plan-move="1" aria-label="Siguiente">${icon("right")}</button>
-        <strong class="plan-range">${esc(label)}</strong>
-      </div>` : `<strong class="plan-range">${label}</strong>`}
-      ${toApprove.length ? `<button class="btn btn-primary" data-plan-approve-all="${toApprove.map((s) => s.id).join(",")}">${icon("check")}Aprobar ${toApprove.length} ${toApprove.length === 1 ? "propuesta" : "propuestas"}</button>` : ""}
-    </div>
-    ${body}
-
-    <div class="section-title">Ya publicado <span class="count">${published.length}</span>
-      <button class="btn btn-ghost" style="margin-left:auto" data-plan-action="published">${icon("plus")}Registrar publicado</button></div>
-    ${published.length ? `<div class="card plan-published">${published.map(publishedRow).join("")}</div>` : `<div class="card muted small">Registra lo que ya salió (con su enlace y, si quieres, sus números): el agente lo usa para no repetir y para ver qué funciona.</div>`}
-
-    <div class="plan-foot small muted">
-      <a href="/api/plan/export?accountId=${acc.id}" download>Exportar plan (JSON)</a> ·
-      <label class="link-like">Importar plan<input type="file" accept="application/json,.json" id="plan-import" hidden></label>
     </div>`;
 }
 
-function slotCard(s, compact = false) {
+function slotCard(s) {
   const [fl, fi] = FORMAT_UI[s.format] || FORMAT_UI.POST;
+  const f = slotFlow(s);
   return `
-    <div class="slot st-${s.status}" data-plan-open="${s.id}" role="button" tabindex="0">
-      <div class="slot-top"><span class="slot-format">${icon(fi)}${fl}</span><span class="slot-time">${esc(s.time)}</span></div>
+    <div class="slot f-${s.format} st-${s.status} ${f.done ? "done" : ""}" data-plan-open="${s.id}" role="button" tabindex="0" title="${esc(s.theme || "")}">
+      <div class="slot-top"><span class="slot-time">${esc(s.time)}</span><span class="ftag ft-${s.format}">${icon(fi)}${fl}</span></div>
       <div class="slot-theme">${esc(s.theme || "Sin tema")}</div>
-      ${!compact && s.hook ? `<div class="slot-hook">“${esc(s.hook)}”</div>` : ""}
-      <div class="slot-foot">${planPill(s.status)}<span class="tag">${esc(GOAL_UI[s.goal] || s.goal)}</span>${s.postId ? `<span class="tag tag-soft">${icon("image", 'style="width:11px;height:11px;vertical-align:-1px"')} borrador</span>` : ""}</div>
-      ${s.status === "proposed" ? `<button class="btn btn-sm" data-plan-approve="${s.id}">${icon("check")}Aprobar</button>` : ""}
+      <div class="slot-foot">${nextBtn(s, f)}</div>
     </div>`;
 }
 
+// Semana: rejilla por horas en escritorio; selector de días + agenda en el móvil.
 function planWeekHtml(slots, from, today) {
-  const cols = [];
-  for (let i = 0; i < 7; i++) {
-    const d = pAddDays(from, i);
-    const day = slots.filter((s) => s.date === d && s.status !== "skipped");
-    const phase = day.find((s) => s.phase)?.phase;
-    cols.push(`
-      <div class="week-col ${d === today ? "today" : ""} ${d < today ? "past" : ""}">
-        <div class="week-head"><span>${WEEKDAYS[i]}</span><strong>${Number(d.slice(8))}</strong>${phase ? `<em>${esc(phase)}</em>` : ""}</div>
-        ${day.map((s) => slotCard(s)).join("") || `<button class="week-empty" data-plan-new-date="${d}">${icon("plus")}</button>`}
-      </div>`);
+  const days = [0, 1, 2, 3, 4, 5, 6].map((i) => pAddDays(from, i));
+  const week = slots.filter((s) => s.date >= from && s.date <= days[6] && s.status !== "skipped");
+  const hours = week.map((s) => Number(s.time.slice(0, 2)));
+  const h0 = Math.min(9, ...hours);
+  const h1 = Math.max(21, ...hours);
+  const head = days.map((d, i) => {
+    const phase = week.find((s) => s.date === d && s.phase)?.phase;
+    return `<div class="tg-day ${d === today ? "today" : ""} ${d < today ? "past" : ""}"><b>${Number(d.slice(8))}</b><small>${WEEKDAYS[i]}</small>${phase ? `<em title="${esc(phase)}">${esc(phase)}</em>` : ""}</div>`;
+  }).join("");
+  let rows = "";
+  for (let h = h0; h <= h1; h++) {
+    const hh = String(h).padStart(2, "0");
+    rows += `<div class="tg-row"><div class="tg-hour">${hh}:00</div>${days.map((d) => {
+      const cell = week.filter((s) => s.date === d && Number(s.time.slice(0, 2)) === h);
+      if (cell.length) return `<div class="tg-cell ${d < today ? "past" : ""}">${cell.map(slotCard).join("")}</div>`;
+      return d < today ? `<div class="tg-cell past"></div>` : `<div class="tg-cell" data-plan-new-slot="${d}|${hh}:00" title="Añadir a las ${hh}:00"></div>`;
+    }).join("")}</div>`;
   }
-  return `<div class="plan-week">${cols.join("")}</div>`;
+
+  const sel = planState.day >= from && planState.day <= days[6] ? planState.day : today >= from && today <= days[6] ? today : from;
+  const dayList = week.filter((s) => s.date === sel);
+  const selName = pDay(sel, { weekday: "long", day: "numeric", month: "long" });
+  return `
+    <div class="tgrid"><div class="tg-head"><div></div>${head}</div>${rows}</div>
+    <div class="mday">
+      ${dayPillsHtml(from, sel, week, "data-plan-pick")}
+      <div class="mday-label">${selName[0].toUpperCase() + selName.slice(1)}</div>
+      ${dayList.map(agendaRow).join("") || `<div class="card empty" style="padding:28px 16px"><p style="margin:0 0 10px">Nada planificado este día.</p>${sel >= today ? `<button class="btn" data-plan-new-date="${sel}">${icon("plus")}Añadir tarjeta</button>` : ""}</div>`}
+    </div>`;
 }
 
 function planMonthHtml(slots, from, today) {
@@ -1108,7 +1386,7 @@ function planMonthHtml(slots, from, today) {
     cells.push(`
       <div class="cal-day ${d.slice(0, 7) !== month ? "out" : ""} ${d === today ? "today" : ""}" data-plan-day="${d}">
         <span class="cal-num">${Number(d.slice(8))}</span>
-        ${day.map((s) => `<div class="cal-ev plan-ev st-${s.status}" data-plan-open="${s.id}" title="${esc(s.theme)}">${icon((FORMAT_UI[s.format] || FORMAT_UI.POST)[1])}<span>${esc(s.time)} ${esc(s.theme)}</span></div>`).join("")}
+        ${day.map((s) => `<div class="cal-ev plan-ev f-${s.format} st-${s.status}" data-plan-open="${s.id}" title="${esc(s.theme)}">${icon((FORMAT_UI[s.format] || FORMAT_UI.POST)[1])}<span>${esc(s.time)} ${esc(s.theme)}</span></div>`).join("")}
       </div>`);
   }
   return `<div class="cal">${WEEKDAYS.map((d) => `<div class="cal-head">${d}</div>`).join("")}${cells.join("")}</div>`;
@@ -1167,9 +1445,13 @@ function reviewHtml(r) {
 }
 
 // ---------- ficha de una tarjeta ----------
+function slotFlowHtml(s) {
+  const f = slotFlow(s);
+  return `<div class="slot-flow">${f.act ? `<div class="slot-flow-next">${esc(f.todo)}<small>Siguiente paso · ${whenLabel(s.date)}</small></div>` : `<div class="slot-flow-next">${esc(f.label)}</div>`}${stepsHtml(f)}</div>`;
+}
 function openSlot(id, preset = {}) {
   const existing = id ? slotById(id) : null;
-  const s = existing || { date: preset.date || pAddDays(planToday(), 1), time: "19:00", format: "REEL", goal: "leads", status: preset.status || "approved", outline: [], hashtags: [], metrics: {}, history: [] };
+  const s = existing || { date: preset.date || pAddDays(planToday(), 1), time: preset.time || "19:00", format: "REEL", goal: "leads", status: preset.status || "approved", outline: [], hashtags: [], metrics: {}, history: [] };
   const isNew = !existing;
   const asPublished = s.status === "published";
   const acc = accountById(existing?.accountId || planState.accountId);
@@ -1185,6 +1467,7 @@ function openSlot(id, preset = {}) {
       </div>
       <form id="slot-form">
         <div class="sheet-body">
+          ${isNew ? "" : slotFlowHtml(s)}
           ${s.why ? `<div class="note note-info small"><strong>Por qué:</strong> ${esc(s.why)}</div>` : ""}
           <div class="grid grid-3" style="gap:12px">
             <div class="field"><label>Día</label><input class="input" type="date" name="date" value="${esc(s.date)}" required></div>
@@ -1360,27 +1643,37 @@ async function importPlan(file) {
   }
 }
 
-// Inicio: lo que toca hoy y lo próximo del plan.
-function planTodayHtml() {
-  const t = planToday();
-  const all = (state.data.plan?.slots || []).filter((s) => !["skipped", "published"].includes(s.status) && s.date >= t).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
-  if (!all.length) return "";
-  const todays = all.filter((s) => s.date === t);
-  const next = all.filter((s) => s.date !== t).slice(0, 3);
-  const row = (s) => `<div class="list-row" data-go="plan" data-plan-focus="${s.id}">
-      <div class="plan-date"><strong>${pDay(s.date, { weekday: "short" })}</strong><span>${Number(s.date.slice(8))}</span></div>
-      <div class="row-main"><div class="row-title">${esc(s.theme)}</div><div class="row-sub">${esc(s.time)} · ${(FORMAT_UI[s.format] || FORMAT_UI.POST)[0]} · @${esc(accountById(s.accountId)?.username || "—")}</div></div>
-      ${planPill(s.status)}</div>`;
-  return `<div class="card" style="margin-top:16px">
-      <h3 style="margin:0 0 6px;font-size:17px">${todays.length ? "Hoy en el plan" : "Próximo en el plan"}</h3>
-      ${(todays.length ? todays : next).map(row).join("")}
-      ${todays.length && next.length ? `<div class="muted small" style="margin-top:8px">Después: ${next.map((s) => `${pDay(s.date, { weekday: "short", day: "numeric" })} · ${esc(s.theme)}`).join(" — ")}</div>` : ""}
-    </div>`;
-}
-
 document.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-plan-open],[data-plan-approve],[data-plan-approve-all],[data-plan-mode],[data-plan-move],[data-plan-account],[data-plan-action],[data-plan-change],[data-plan-new-date],[data-plan-day],[data-plan-focus]");
+  const t = e.target.closest("[data-slot-next],[data-plan-skip],[data-plan-pick],[data-plan-new-slot],[data-home-day],[data-ap-tab],[data-plan-open],[data-plan-approve],[data-plan-approve-all],[data-plan-mode],[data-plan-move],[data-plan-account],[data-plan-action],[data-plan-change],[data-plan-new-date],[data-plan-day],[data-plan-focus]");
   if (!t || t.closest(".sheet")) return;
+  if (t.dataset.slotNext) {
+    e.stopPropagation();
+    return slotNext(t.dataset.slotNext, t);
+  }
+  if (t.dataset.planSkip) {
+    return busy(t, async () => {
+      await api(`/plan/slots/${t.dataset.planSkip}/status`, { body: { status: "skipped" } });
+      await refresh();
+      rerenderView();
+      toast("Descartada");
+    });
+  }
+  if (t.dataset.planPick) {
+    planState.day = t.dataset.planPick;
+    return rerenderView();
+  }
+  if (t.dataset.homeDay) {
+    state.homeDay = t.dataset.homeDay;
+    return rerenderView();
+  }
+  if (t.dataset.apTab) {
+    apState.tab = t.dataset.apTab;
+    return rerenderView();
+  }
+  if (t.dataset.planNewSlot) {
+    const [date, time] = t.dataset.planNewSlot.split("|");
+    return openSlot(null, { date, time });
+  }
   if (t.dataset.planFocus) {
     const s = slotById(t.dataset.planFocus);
     if (s) {
@@ -1396,6 +1689,7 @@ document.addEventListener("click", (e) => {
       await api(`/plan/slots/${t.dataset.planApprove}/status`, { body: { status: "approved" } });
       await refresh();
       rerenderView();
+      toast("Aprobada · siguiente paso: crear el borrador");
     });
   }
   if (t.dataset.planApproveAll) {
@@ -1418,6 +1712,7 @@ document.addEventListener("click", (e) => {
     if (n === 0) planState.cursor = planToday();
     else if (planState.mode === "month") planState.cursor = pAddDays(pAddDays(planState.cursor.slice(0, 8) + "01", n > 0 ? 32 : -1).slice(0, 8) + "01", 0);
     else planState.cursor = pAddDays(planState.cursor, 7 * n);
+    planState.day = "";
     return rerenderView();
   }
   if (t.dataset.planAccount) {
@@ -1438,8 +1733,34 @@ document.addEventListener("click", (e) => {
   if (a === "generate" || a === "replan") openPlanAgent(a);
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && e.target.matches?.(".slot[data-plan-open]")) openSlot(e.target.dataset.planOpen);
+  if (e.key === "Enter" && e.target.matches?.(".slot[data-plan-open], .ag[data-plan-open]")) openSlot(e.target.dataset.planOpen);
 });
+
+// Botón negro de cada tarjeta: hace el siguiente paso del flujo.
+function slotNext(id, btn) {
+  const s = slotById(id);
+  if (!s) return;
+  const f = slotFlow(s);
+  if (f.act === "approve") {
+    return busy(btn, async () => {
+      await api(`/plan/slots/${id}/status`, { body: { status: "approved" } });
+      await refresh();
+      rerenderView();
+      toast("Aprobada · siguiente paso: crear el borrador");
+    });
+  }
+  if (f.act === "draft") {
+    return busy(btn, async () => {
+      const post = await api(`/plan/slots/${id}/draft`, { body: {} });
+      await refresh();
+      rerenderView();
+      openPost(post.id);
+      toast("Borrador creado · sube aquí el arte");
+    });
+  }
+  if (f.act === "post") return openPost(s.postId);
+  openSlot(id);
+}
 document.addEventListener("change", (e) => {
   if (e.target.id === "plan-import" && e.target.files[0]) importPlan(e.target.files[0]);
 });
@@ -2081,7 +2402,7 @@ document.addEventListener("click", (e) => {
   const t = e.target.closest("[data-profile],[data-research],[data-res-account],[data-res-count],[data-res-remove],[data-go],[data-action],[data-open],[data-filter],[data-cal],[data-chip],[data-proposal-approve],[data-proposal-reject],[data-test-account],[data-remove-account],[data-close]");
   if (!t) return;
   if (t.matches("[data-close]")) return closeSheet();
-  if (t.closest(".sheet") && !t.matches("[data-open],[data-go]")) return; // la hoja maneja sus propios botones
+  if (t.closest(".sheet") && !t.matches("[data-open],[data-go]") && !t.closest(".more-menu")) return; // la hoja maneja sus propios botones
   if (t.dataset.go) {
     e.preventDefault();
     closeSheet();
@@ -2152,6 +2473,8 @@ document.addEventListener("click", (e) => {
     });
   }
   const action = t.dataset.action;
+  if (action === "theme") return toggleTheme();
+  if (action === "more") return openMore();
   if (action === "new-post") openNewPost();
   if (action === "connect") openConnect();
   if (action === "logout") api("/logout", { body: {} }).then(() => location.reload());

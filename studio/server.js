@@ -1,4 +1,4 @@
-// Studio — sube, valida y publica artes en Instagram con un agente que solo actúa cuando tú apruebas.
+// Taskday — sube, valida y publica artes en Instagram con un agente que solo actúa cuando tú apruebas.
 import express from "express";
 import fs from "node:fs";
 import path from "node:path";
@@ -520,7 +520,7 @@ async function publishPost(post) {
     if (slot) {
       slot.status = "published";
       slot.publishedUrl = post.permalink || slot.publishedUrl;
-      slotHistory(slot, "Publicado desde Studio");
+      slotHistory(slot, "Publicado desde Taskday");
     }
     store.log(`Publicado en @${account.username}: «${post.title}»`, "success");
     store.save();
@@ -1055,7 +1055,7 @@ app.post("/api/plan/slots/:id/draft", (req, res) => {
   const s = findSlot(req.params.id);
   const existing = s.postId && db().posts.find((p) => p.id === s.postId);
   if (existing) return res.json(existing);
-  if (s.format === "STORIES") throw new HttpError(400, "Las stories no se publican por Studio todavía: úsala como guion.");
+  if (s.format === "STORIES") throw new HttpError(400, "Las stories no se publican por Taskday todavía: úsala como guion.");
   const post = {
     id: store.id("post"),
     title: (s.theme || s.hook || "Pieza del plan").slice(0, 80),
@@ -1211,7 +1211,7 @@ app.post("/api/plan/import", express.json({ limit: "5mb" }), (req, res) => {
   const { accountId, data, replace, includeProfile } = req.body || {};
   const acc = findAccount(accountId);
   if (!acc) throw new HttpError(400, "Elige la cuenta.");
-  if (data?.kind !== "studio-plan" || !Array.isArray(data.slots)) throw new HttpError(400, "Ese archivo no es un plan de Studio.");
+  if (data?.kind !== "studio-plan" || !Array.isArray(data.slots)) throw new HttpError(400, "Ese archivo no es un plan de Taskday.");
   const p = planData();
   if (replace) p.slots = p.slots.filter((s) => s.accountId !== acc.id || s.postId);
   const known = new Set(p.slots.map((s) => s.id));
@@ -1292,7 +1292,7 @@ app.use((err, _req, res, _next) => {
 
 const PORT = Number(process.env.PORT) || 4100;
 if (process.env.NODE_ENV !== "test") {
-  app.listen(PORT, () => console.log(`Studio listo en http://localhost:${PORT}`));
+  app.listen(PORT, () => console.log(`Taskday listo en http://localhost:${PORT}`));
   setInterval(tick, 30 * 1000);
   setInterval(maintenance, 3600 * 1000);
   setTimeout(maintenance, 60 * 1000);
