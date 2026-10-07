@@ -211,8 +211,15 @@ function adoptDemo(real) {
   for (const s of d.plan.slots) if (s.accountId === demo.id) s.accountId = real.id;
   for (const p of d.posts) if (p.accountId === demo.id && !["published", "publishing", "scheduled"].includes(p.status)) p.accountId = real.id;
   for (const r of d.research) if (r.accountId === demo.id) r.accountId = real.id;
-  if (d.plan.summaries?.[demo.id]) d.plan.summaries[real.id] = d.plan.summaries[demo.id];
-  store.log(`@${real.username} hereda el plan y el perfil de la cuenta de prueba`);
+  for (const r of d.plan.reviews || []) if (r.accountId === demo.id) r.accountId = real.id;
+  if (d.plan.summaries?.[demo.id]) {
+    d.plan.summaries[real.id] = d.plan.summaries[demo.id];
+    delete d.plan.summaries[demo.id];
+  }
+  // Sin nada propio (lo publicado o programado se queda con ella), la cuenta de prueba sobra: así no hay dos iguales.
+  const left = d.posts.some((p) => p.accountId === demo.id);
+  if (!left) d.accounts = d.accounts.filter((a) => a.id !== demo.id);
+  store.log(`@${real.username} hereda el plan y el perfil de la cuenta de prueba${left ? "" : " (la de prueba se quita)"}`);
 }
 
 // Cuenta manual (sin conexión): se planifica y se publica a mano.
