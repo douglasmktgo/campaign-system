@@ -216,7 +216,7 @@ function adoptDemo(real) {
 }
 
 // Cuenta manual (sin conexión): se planifica y se publica a mano.
-const PRODUCCION_KEYS = ["carpeta", "estilo", "reglasVideo"];
+const PRODUCCION_KEYS = ["carpeta", "estilo", "reglasVideo", "artes"];
 function cleanProduccion(p) {
   const out = {};
   if (typeof p?.carpeta === "string" && p.carpeta.trim()) {
@@ -228,6 +228,8 @@ function cleanProduccion(p) {
     out.estilo = p.estilo.trim();
   }
   if (typeof p?.reglasVideo === "string" && p.reglasVideo.trim()) out.reglasVideo = p.reglasVideo.trim().slice(0, 4000);
+  // «manual» = las artes (carruseles y posts) las hace el dueño; Taskday no las manda a producir.
+  if (p?.artes === "manual") out.artes = "manual";
   return out;
 }
 function addManualAccount({ username, name, profile, produccion }) {
@@ -260,17 +262,29 @@ function cleanProfile(base, b) {
 
 // Bandeja de entrada: un JSON en data/entrantes ({ username, name, profile, produccion }) crea la cuenta manual
 // (o actualiza su perfil si ya existe) al arrancar. Sirve para preparar cuentas sin pasar por la web.
+// Un plan exportado ({ kind: "studio-plan", username, slots }) se añade a esa cuenta (sin duplicar tarjetas).
 function importEntrantes() {
   const dir = path.join(store.DATA_DIR, "entrantes");
   if (!fs.existsSync(dir)) return;
-  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith(".json"))) {
+  const files = fs.readdirSync(dir).filter((x) => x.endsWith(".json")).map((f) => {
+    try {
+      return { f, data: JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")) };
+    } catch (e) {
+      return { f, error: e };
+    }
+  });
+  files.sort((a, b) => (a.data?.kind === "studio-plan") - (b.data?.kind === "studio-plan"));
+  for (const { f, data, error } of files) {
     const file = path.join(dir, f);
     try {
-      const data = JSON.parse(fs.readFileSync(file, "utf8"));
+      if (error) throw error;
       const u = String(data.username || "").replace(/^@/, "").toLowerCase();
       if (!/^[\w.]{2,30}$/.test(u)) throw new Error("username no válido");
       const acc = db().accounts.find((a) => a.username.toLowerCase() === u);
-      if (acc) {
+      if (data.kind === "studio-plan") {
+        if (!acc) throw new Error(`no existe la cuenta @${u}: añádela primero`);
+        importPlanInto(acc, data, { includeProfile: !acc.profile?.about });
+      } else if (acc) {
         if (data.profile) acc.profile = cleanProfile(acc.profile, data.profile);
         if (data.produccion) acc.produccion = cleanProduccion(data.produccion);
         if (data.name) acc.name = String(data.name).slice(0, 80);
@@ -286,7 +300,6 @@ function importEntrantes() {
   }
   store.save();
 }
-importEntrantes();
 
 app.put("/api/accounts/:id/produccion", (req, res) => {
   const acc = findAccount(req.params.id);
@@ -1181,6 +1194,7 @@ const hasArt = (s) => {
 function startArt(s, force = false) {
   if (s.format === "REEL") return encargoReel(s, force);
   if (!prod.producible(s) || (!force && (hasArt(s) || s.art?.status === "ready"))) return false;
+  if (findAccount(s.accountId)?.produccion?.artes === "manual") return false;
   return prod.enqueue(s, { onDone: artDone, cfg: findAccount(s.accountId)?.produccion });
 }
 function encargoReel(s, force) {
@@ -1253,6 +1267,7 @@ app.post("/api/plan/slots/:id/produce", (req, res) => {
   const s = findSlot(req.params.id);
   if (s.format === "REEL") { startArt(s, true); store.save(); return res.json(s); }
   if (!prod.producible(s)) throw new HttpError(400, "Solo se producen carruseles y posts.");
+  if (findAccount(s.accountId)?.produccion?.artes === "manual") throw new HttpError(400, "En esta cuenta las artes las haces tú (Perfil de marca → Producción de artes).");
   if (!prod.available()) throw new HttpError(400, "El productor de artes no está en este equipo (herramientas/produccion/producir.mjs).");
   if (prod.busy(s.id)) return res.json(s);
   startArt(s, true);
@@ -1405,6 +1420,11 @@ app.post("/api/plan/import", express.json({ limit: "5mb" }), (req, res) => {
   const { accountId, data, replace, includeProfile } = req.body || {};
   const acc = findAccount(accountId);
   if (!acc) throw new HttpError(400, "Elige la cuenta.");
+  const n = importPlanInto(acc, data, { replace, includeProfile });
+  res.json({ ok: true, imported: n });
+});
+
+function importPlanInto(acc, data, { replace = false, includeProfile = false } = {}) {
   if (data?.kind !== "studio-plan" || !Array.isArray(data.slots)) throw new HttpError(400, "Ese archivo no es un plan de Taskday.");
   const p = planData();
   if (replace) p.slots = p.slots.filter((s) => s.accountId !== acc.id || s.postId);
@@ -1432,8 +1452,8 @@ app.post("/api/plan/import", express.json({ limit: "5mb" }), (req, res) => {
   }
   store.log(`Plan importado en @${acc.username}: ${n} tarjetas`, "success");
   store.save();
-  res.json({ ok: true, imported: n });
-});
+  return n;
+}
 
 // ---------------------------------------------------------------- ajustes
 
@@ -1483,6 +1503,9 @@ app.use((err, _req, res, _next) => {
   if (status >= 500) console.error(err);
   res.status(status).json({ error: status >= 500 ? "Error interno del servidor." : err.message });
 });
+
+// Al final del arranque: la bandeja de entrada usa el plan y las cuentas ya definidos.
+importEntrantes();
 
 const PORT = Number(process.env.PORT) || 4100;
 // En tu PC solo escucha en este mismo equipo (nadie de la Wi-Fi llega). En Render (o con HOST=0.0.0.0) escucha en todas las interfaces.

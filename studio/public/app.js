@@ -407,7 +407,7 @@ function slotFlow(s) {
   if (s.status === "proposed") return { step: 0, act: "approve", label: "Aprobar", todo: `Aprueba ${name}` };
   if (s.format === "STORIES") return { step: 2, act: "slot", label: "Hacer", todo: `Haz ${name} y márcalas como publicadas` };
   // Carruseles y posts: al aprobar, Claude produce el arte (láminas + PSD) y lo deja en el borrador.
-  if (PRODUCIBLE.includes(s.format) && state.data.settings?.producer && !post?.media?.length) {
+  if (PRODUCIBLE.includes(s.format) && state.data.settings?.producer && accountById(s.accountId)?.produccion?.artes !== "manual" && !post?.media?.length) {
     const st = s.art?.status;
     if (st === "queued" || st === "producing") return { step: 2, label: "Arte en producción…", todo: `Arte en producción: ${name}`, producing: true };
     return { step: 2, act: "produce", label: st === "error" ? "Reintentar arte" : "Producir arte", todo: st === "error" ? `El arte ${de(name)} falló: ${s.art.error}` : `Produce el arte ${de(name)}` };
@@ -880,13 +880,20 @@ function openConnect() {
       <div class="sheet-head"><h2>Conectar Instagram</h2><button class="btn btn-icon" data-close>${icon("x")}</button></div>
       <div class="sheet-body">
         <div class="note note-info">Necesitas una cuenta de Instagram <strong>profesional</strong> (Empresa o Creador). Es gratis y se cambia desde la app de Instagram en Configuración → Tipo de cuenta.</div>
+        <p style="margin:14px 0 6px"><strong>Recomendado · sin página de Facebook</strong> (token <code>IG…</code>, se renueva solo)</p>
+        <ol class="steps">
+          <li>En tu <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener">app de Meta</a> → Funções do app → Funções → <strong>Adicionar pessoas</strong> → «Testador do Instagram» → tu usuario.</li>
+          <li>Acepta la invitación con esa cuenta en <a href="https://www.instagram.com/accounts/manage_access/" target="_blank" rel="noopener">Instagram → Apps y sitios web</a> → Invitaciones de tester.</li>
+          <li>En la app de Meta → Casos de uso → API do Instagram → <strong>Configuração da API com login do Instagram</strong> → Gerar tokens → <strong>Adicionar conta</strong> → entra con tu Instagram y pulsa <strong>Gerar token</strong>.</li>
+          <li>Pega aquí el token (empieza por <code>IG…</code>).</li>
+        </ol>
+        <details class="small muted" style="margin:6px 0 12px"><summary>Opción avanzada: con página de Facebook (token <code>EAA…</code>, permite investigar otras cuentas)</summary>
         <ol class="steps">
           <li>Vincula tu Instagram a una página de Facebook: <a href="https://business.facebook.com/latest/settings/profiles" target="_blank" rel="noopener">Meta Business Suite → Configuración → Perfiles</a> → tu página → <strong>Conectar Instagram</strong>.</li>
           <li>Abre el <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener">Explorador de la Graph API</a>, elige tu app y añade los permisos <code>instagram_basic</code>, <code>instagram_content_publish</code>, <code>instagram_manage_insights</code>, <code>pages_show_list</code>, <code>pages_read_engagement</code> y <code>business_management</code>.</li>
           <li>Pulsa <strong>Generate Access Token</strong> y marca tu página <em>y</em> tu cuenta de Instagram.</li>
           <li>Alarga el token a 60 días en el <a href="https://developers.facebook.com/tools/debug/accesstoken/" target="_blank" rel="noopener">depurador</a> (<em>Ampliar token de acceso</em>) y pega aquí el token largo (empieza por <code>EAA…</code>).</li>
-        </ol>
-        <p class="muted small">Sin página de Facebook: en tu app de Meta → Instagram → «API con inicio de sesión de Instagram» → <strong>Generar token</strong> (empieza por <code>IG…</code>). Se renueva solo, pero no permite investigar otras cuentas.</p>
+        </ol></details>
         <form id="connect-form">
           <div class="field"><label>Token de acceso</label><textarea class="textarea" name="token" style="min-height:90px;font-family:ui-monospace,monospace;font-size:13px" placeholder="EAA… o IG…" required></textarea></div>
           <button class="btn btn-primary btn-lg" style="width:100%" type="submit">Conectar</button>
@@ -942,6 +949,10 @@ function openProfile(accId) {
             <select class="select" name="kind"><option value="">Elige…</option>${PROFILE_KINDS.map((k) => `<option ${p.kind === k ? "selected" : ""}>${k}</option>`).join("")}</select></div>
           ${PROFILE_UI.map(([k, label, ph]) => `<div class="field"><label>${label}</label><textarea class="textarea" style="min-height:64px" name="${k}" placeholder="${esc(ph)}">${esc(p[k] || "")}</textarea></div>`).join("")}
           <div class="field"><label>Producción de artes</label>
+            <select class="select" name="prod_artes" style="margin-bottom:6px">
+              <option value="" ${a.produccion?.artes === "manual" ? "" : "selected"}>Claude produce carruseles y posts al aprobarlos (láminas + PSD)</option>
+              <option value="manual" ${a.produccion?.artes === "manual" ? "selected" : ""}>Las artes las hago yo (fotos propias); Claude solo edita los reels</option>
+            </select>
             <input class="input" name="prod_carpeta" placeholder="Carpeta de esta cuenta (vacío = la carpeta de Loxita)" value="${esc(a.produccion?.carpeta || "")}">
             <input class="input" name="prod_estilo" style="margin-top:6px" placeholder="Estilo de las artes (vacío = loxita)" value="${esc(a.produccion?.estilo || "")}">
             <textarea class="textarea" name="prod_reglasVideo" style="min-height:56px;margin-top:6px" placeholder="Reglas para los encargos de reels de esta cuenta (vacío = reglas de Loxita)">${esc(a.produccion?.reglasVideo || "")}</textarea>
