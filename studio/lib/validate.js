@@ -18,10 +18,13 @@ export const CAROUSEL_MAX = 10;
 const MIN_RATIO = 0.8; // 4:5
 const MAX_RATIO = 1.91;
 
-function imageChecks(m, i, multi) {
+// Publicando a mano (desde la app de Instagram) valen PNG y el vertical 3:4 (1080×1440 / 1080×1450).
+const isThreeFour = (r) => r >= 0.73 && r < MIN_RATIO - 0.01;
+
+function imageChecks(m, i, multi, manual) {
   const label = multi ? `Imagen ${i + 1}: ` : "";
   const out = [];
-  if (m.mime !== "image/jpeg") {
+  if (m.mime !== "image/jpeg" && !manual) {
     out.push({ level: "error", text: `${label}Instagram solo publica imágenes JPEG.`, fix: "adapt" });
   }
   if (m.size > 8 * MB) {
@@ -30,7 +33,9 @@ function imageChecks(m, i, multi) {
   if (m.width && m.height) {
     const ratio = m.width / m.height;
     const size = `${m.width}×${m.height}`;
-    if (ratio < MIN_RATIO - 0.01) {
+    if (manual && isThreeFour(ratio)) {
+      // vertical 3:4: válido publicando a mano (la API lo recortaría a 4:5)
+    } else if (ratio < MIN_RATIO - 0.01) {
       const hint = ratio >= 0.72 ? " (formato 3:4, como 1080×1440 o 1080×1450)" : "";
       out.push({
         level: "error",
@@ -70,7 +75,8 @@ function videoChecks(m, i, multi) {
   return out;
 }
 
-export function validatePost(post) {
+// `manual: true` = se publica a mano desde la app de Instagram (sin API): PNG y 3:4 son válidos.
+export function validatePost(post, { manual = false } = {}) {
   const checks = [];
   const media = post.media || [];
 
@@ -101,7 +107,7 @@ export function validatePost(post) {
 
   const multi = media.length > 1;
   media.forEach((m, i) => {
-    checks.push(...(m.mime.startsWith("video/") ? videoChecks(m, i, multi) : imageChecks(m, i, multi)));
+    checks.push(...(m.mime.startsWith("video/") ? videoChecks(m, i, multi) : imageChecks(m, i, multi, manual)));
   });
 
   const caption = post.caption || "";

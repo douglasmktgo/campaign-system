@@ -10,6 +10,7 @@ import { validatePost, hasErrors } from "./lib/validate.js";
 import * as ig from "./lib/instagram.js";
 import * as agent from "./lib/agent.js";
 import * as plan from "./lib/plan.js";
+import * as prod from "./lib/produccion.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -40,8 +41,10 @@ function findAccount(id) {
 function history(post, text) {
   post.history.unshift({ at: store.now(), text });
 }
+// Sin URL pública ni cuenta real conectada se publica a mano: valen PNG y 3:4.
+const manualPublishing = () => /^https?:\/\/(localhost|127\.|\[::1\])/.test(publicBase() || "http://localhost") || !db().accounts.some((a) => !a.demo && a.status !== "error");
 function recheck(post) {
-  post.checks = validatePost(post);
+  post.checks = validatePost(post, { manual: manualPublishing() });
 }
 
 // ---------------------------------------------------------------- acceso
@@ -160,6 +163,7 @@ app.get("/api/state", (_req, res) => {
       brandGuide: d.settings.brandGuide,
       passwordFromEnv: Boolean(ENV_PASSWORD),
       autoReview: d.settings.autoReview !== false,
+      producer: prod.available(),
     },
   });
 });
@@ -203,6 +207,7 @@ function adoptDemo(real) {
   const demo = d.accounts.find((a) => a.demo && a.username.toLowerCase() === real.username.toLowerCase());
   if (!demo) return;
   if (!real.profile && demo.profile) real.profile = demo.profile;
+  if (!real.produccion && demo.produccion) real.produccion = demo.produccion;
   for (const s of d.plan.slots) if (s.accountId === demo.id) s.accountId = real.id;
   for (const p of d.posts) if (p.accountId === demo.id && !["published", "publishing", "scheduled"].includes(p.status)) p.accountId = real.id;
   for (const r of d.research) if (r.accountId === demo.id) r.accountId = real.id;
@@ -210,24 +215,92 @@ function adoptDemo(real) {
   store.log(`@${real.username} hereda el plan y el perfil de la cuenta de prueba`);
 }
 
-app.post("/api/accounts/demo", (req, res) => {
+// Cuenta manual (sin conexión): se planifica y se publica a mano.
+const PRODUCCION_KEYS = ["carpeta", "estilo", "reglasVideo"];
+function cleanProduccion(p) {
+  const out = {};
+  if (typeof p?.carpeta === "string" && p.carpeta.trim()) {
+    if (!path.isAbsolute(p.carpeta.trim())) throw new HttpError(400, "La carpeta debe ser una ruta completa (p. ej. D:\\SOY GIO).");
+    out.carpeta = p.carpeta.trim().slice(0, 300);
+  }
+  if (typeof p?.estilo === "string" && p.estilo.trim()) {
+    if (!/^[a-z0-9-]{2,30}$/.test(p.estilo.trim())) throw new HttpError(400, "El estilo solo admite letras minúsculas, números y guiones.");
+    out.estilo = p.estilo.trim();
+  }
+  if (typeof p?.reglasVideo === "string" && p.reglasVideo.trim()) out.reglasVideo = p.reglasVideo.trim().slice(0, 4000);
+  return out;
+}
+function addManualAccount({ username, name, profile, produccion }) {
   const d = db();
   const n = d.accounts.filter((a) => a.demo).length + 1;
-  d.accounts.push({
+  const acc = {
     id: store.id("acc"),
     igUserId: "demo" + n,
-    username: /^[\w.]{2,30}$/.test(req.body?.username || "") ? req.body.username.toLowerCase() : n === 1 ? "tu.marca.demo" : `tu.marca.demo${n}`,
-    name: "Cuenta de prueba",
+    username: /^[\w.]{2,30}$/.test(username || "") ? username.toLowerCase() : n === 1 ? "tu.marca.demo" : `tu.marca.demo${n}`,
+    name: String(name || "").slice(0, 80) || "Cuenta manual",
     avatar: "",
     followers: null,
     token: "",
     demo: true,
     status: "ok",
     connectedAt: store.now(),
-  });
-  store.log("Cuenta de prueba añadida (simula publicaciones, no publica en Instagram).");
+  };
+  if (profile) acc.profile = cleanProfile({}, profile);
+  if (produccion) acc.produccion = cleanProduccion(produccion);
+  d.accounts.push(acc);
+  return acc;
+}
+function cleanProfile(base, b) {
+  const profile = { ...(base || {}) };
+  for (const k of Object.keys(agent.PROFILE_FIELDS)) {
+    if (typeof b?.[k] === "string") profile[k] = b[k].slice(0, k === "guide" ? 20000 : 4000);
+  }
+  return profile;
+}
+
+// Bandeja de entrada: un JSON en data/entrantes ({ username, name, profile, produccion }) crea la cuenta manual
+// (o actualiza su perfil si ya existe) al arrancar. Sirve para preparar cuentas sin pasar por la web.
+function importEntrantes() {
+  const dir = path.join(store.DATA_DIR, "entrantes");
+  if (!fs.existsSync(dir)) return;
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith(".json"))) {
+    const file = path.join(dir, f);
+    try {
+      const data = JSON.parse(fs.readFileSync(file, "utf8"));
+      const u = String(data.username || "").replace(/^@/, "").toLowerCase();
+      if (!/^[\w.]{2,30}$/.test(u)) throw new Error("username no válido");
+      const acc = db().accounts.find((a) => a.username.toLowerCase() === u);
+      if (acc) {
+        if (data.profile) acc.profile = cleanProfile(acc.profile, data.profile);
+        if (data.produccion) acc.produccion = cleanProduccion(data.produccion);
+        if (data.name) acc.name = String(data.name).slice(0, 80);
+        store.log(`Perfil de @${u} actualizado desde ${f}`);
+      } else {
+        addManualAccount({ ...data, username: u });
+        store.log(`Cuenta manual @${u} creada desde ${f}`, "success");
+      }
+      fs.renameSync(file, file + ".importado");
+    } catch (e) {
+      store.log(`No se pudo importar ${f}: ${e.message}`, "error");
+    }
+  }
   store.save();
-  res.json({ ok: true });
+}
+importEntrantes();
+
+app.put("/api/accounts/:id/produccion", (req, res) => {
+  const acc = findAccount(req.params.id);
+  if (!acc) throw new HttpError(404, "Cuenta no encontrada.");
+  acc.produccion = cleanProduccion(req.body || {});
+  store.save();
+  res.json(publicAccount(acc));
+});
+
+app.post("/api/accounts/demo", (req, res) => {
+  const acc = addManualAccount({ username: req.body?.username, name: req.body?.name || "Cuenta de prueba" });
+  store.log(`Cuenta manual @${acc.username} añadida (se publica a mano).`);
+  store.save();
+  res.json({ ok: true, id: acc.id });
 });
 
 app.post("/api/accounts/:id/test", wrap(async (req, res) => {
@@ -302,11 +375,18 @@ function cleanMedia(list) {
 
 // ---------------------------------------------------------------- artes
 
-// Perfil de marca de la cuenta (con la guía general de Ajustes como respaldo) y guía en PDF si la hay.
+// Perfil de marca de la cuenta y guía en PDF si la hay. La guía general de Ajustes solo se usa
+// mientras la cuenta no tiene perfil propio: así el tono de una cuenta nunca se cuela en otra.
+function generalGuide(acc) {
+  return !agent.profileText(acc?.profile) && db().settings.brandGuide ? db().settings.brandGuide : "";
+}
+function agentProfile(acc) {
+  return { ...(acc.profile || {}), guide: [acc.profile?.guide, generalGuide(acc)].filter(Boolean).join("\n\n") };
+}
 function brandContext(accountId) {
   const acc = findAccount(accountId);
-  const text = agent.profileText(acc?.profile);
-  return [text, db().settings.brandGuide ? "Guía general: " + db().settings.brandGuide : ""].filter(Boolean).join("\n");
+  const g = generalGuide(acc);
+  return [agent.profileText(acc?.profile), g ? "Guía general: " + g : ""].filter(Boolean).join("\n");
 }
 function guideDoc(accountId) {
   const g = findAccount(accountId)?.profile?.guideFile;
@@ -622,11 +702,7 @@ app.put("/api/accounts/:id/profile", (req, res) => {
   const acc = findAccount(req.params.id);
   if (!acc) throw new HttpError(404, "Cuenta no encontrada.");
   const b = req.body || {};
-  const profile = { ...(acc.profile || {}) };
-  for (const k of Object.keys(agent.PROFILE_FIELDS)) {
-    if (typeof b[k] === "string") profile[k] = b[k].slice(0, k === "guide" ? 20000 : 2000);
-  }
-  acc.profile = profile;
+  acc.profile = cleanProfile(acc.profile, b);
   store.save();
   res.json(publicAccount(acc));
 });
@@ -760,7 +836,7 @@ async function runResearch(r) {
       .map((f) => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: fs.readFileSync(f).toString("base64") } }));
     const result = await agent.research(anthropicKey(), {
       account: acc,
-      profile: { ...(acc.profile || {}), guide: [acc.profile?.guide, db().settings.brandGuide].filter(Boolean).join("\n\n") },
+      profile: agentProfile(acc),
       guideDoc: guideDoc(acc.id),
       ownTop,
       references,
@@ -969,7 +1045,7 @@ function planAgentInput(acc, extra) {
     .slice(0, 12);
   return {
     account: acc,
-    profile: { ...(acc.profile || {}), guide: [acc.profile?.guide, db().settings.brandGuide].filter(Boolean).join("\n\n") },
+    profile: agentProfile(acc),
     guideDoc: guideDoc(acc.id),
     published: slots.filter((s) => s.status === "published").map(plan.slotForAgent),
     planned: slots.filter((s) => !["published", "skipped"].includes(s.status)).map(plan.slotForAgent),
@@ -1023,6 +1099,7 @@ app.post("/api/plan/slots/:id/status", (req, res) => {
     s.metrics = { ...(s.metrics || {}), ...plan.cleanMetrics(req.body?.metrics) };
   }
   slotHistory(s, { approved: "Aprobada por ti", proposed: "Vuelve a propuesta", skipped: "Descartada", published: "Marcada como publicada" }[status]);
+  if (status === "approved") startArt(s);
   store.save();
   res.json(s);
 });
@@ -1035,6 +1112,7 @@ app.post("/api/plan/approve", (req, res) => {
     if (ids.has(s.id) && s.status === "proposed") {
       s.status = "approved";
       slotHistory(s, "Aprobada por ti");
+      startArt(s);
       n++;
     }
   }
@@ -1053,9 +1131,17 @@ app.delete("/api/plan/slots/:id", (req, res) => {
 // Tarjeta → borrador en Artes (estado Idea) con su brief. Al aprobar el arte se propone su hora.
 app.post("/api/plan/slots/:id/draft", (req, res) => {
   const s = findSlot(req.params.id);
-  const existing = s.postId && db().posts.find((p) => p.id === s.postId);
-  if (existing) return res.json(existing);
   if (s.format === "STORIES") throw new HttpError(400, "Las stories no se publican por Taskday todavía: úsala como guion.");
+  const fresh = !(s.postId && db().posts.find((p) => p.id === s.postId));
+  const post = ensureDraft(s);
+  if (fresh) startArt(s);
+  store.save();
+  res.json(post);
+});
+
+function ensureDraft(s) {
+  const existing = s.postId && db().posts.find((p) => p.id === s.postId);
+  if (existing) return existing;
   const post = {
     id: store.id("post"),
     title: (s.theme || s.hook || "Pieza del plan").slice(0, 80),
@@ -1081,8 +1167,116 @@ app.post("/api/plan/slots/:id/draft", (req, res) => {
   if (s.status === "proposed") s.status = "approved";
   slotHistory(s, "Borrador creado en Artes");
   store.log(`Plan → borrador: «${post.title}»`);
+  return post;
+}
+
+// ---------------------------------------------------------------- producción de artes
+// Carrusel o post aprobado sin arte → el productor dibuja las láminas y monta el PSD en Photoshop;
+// las láminas entran en el borrador para revisarlas. Tras reafinar el PSD, «Recargar» trae las exportadas.
+
+const hasArt = (s) => {
+  const post = s.postId && db().posts.find((p) => p.id === s.postId);
+  return !!post?.media?.length;
+};
+function startArt(s, force = false) {
+  if (s.format === "REEL") return encargoReel(s, force);
+  if (!prod.producible(s) || (!force && (hasArt(s) || s.art?.status === "ready"))) return false;
+  return prod.enqueue(s, { onDone: artDone, cfg: findAccount(s.accountId)?.produccion });
+}
+function encargoReel(s, force) {
+  if (!force && (hasArt(s) || s.art?.brief)) return false;
+  try {
+    const r = prod.encargoVideo(s, findAccount(s.accountId)?.produccion);
+    s.art = { ...(s.art || {}), mode: "video", status: "encargo", error: "", brief: r.file, dir: r.dir, requestedAt: store.now() };
+    slotHistory(s, "Encargo de video para Claude: " + path.basename(r.file));
+    store.log(`Encargo de reel para Claude: «${s.theme}»`, "success");
+    return true;
+  } catch (e) {
+    s.art = { ...(s.art || {}), mode: "video", status: "error", error: "No se pudo escribir el encargo: " + e.message };
+    return false;
+  }
+}
+function artDone(s, r) {
+  const live = planData().slots.find((x) => x.id === s.id);
+  if (!live) return;
+  if (!r.ok) {
+    live.art = { ...live.art, status: "error", error: r.error || "Falló la producción." };
+    slotHistory(live, "No se pudo producir el arte: " + live.art.error);
+    store.log(`Arte de «${live.theme}»: ${live.art.error}`, "error");
+  } else {
+    live.art = { ...live.art, ...(r.fuente === "claude" ? { mode: "medida" } : {}), status: "ready", error: "", dir: r.dir, slug: r.slug, psd: r.psd, fuente: r.fuente, warnings: r.warnings || [], producedAt: store.now() };
+    try {
+      const n = attachArt(live, r.files, r.fuente === "claude" ? "Arte a medida producido por Claude" : "Arte producido con la plantilla de marca");
+      store.log(`Arte listo: «${live.theme}» (${n} ${n === 1 ? "lámina" : "láminas"}${r.psd ? " + PSD" : ""})`, "success");
+    } catch (e) {
+      live.art = { ...live.art, status: "error", error: e.message };
+    }
+  }
   store.save();
-  res.json(post);
+}
+// Si Taskday se reinició a mitad de una producción, esa pieza queda para reintentar.
+for (const s of db().plan?.slots || []) {
+  if (["queued", "producing"].includes(s.art?.status)) s.art = { ...s.art, status: "error", error: "Se interrumpió (Taskday se reinició). Vuelve a producir." };
+}
+// Copia las láminas a media/ y las pone en el borrador de la tarjeta (lo crea si hace falta).
+function attachArt(s, files, note) {
+  const post = ensureDraft(s);
+  const media = files.filter((f) => fs.existsSync(f)).map((f) => {
+    const { width, height, mime } = prod.imageSize(f);
+    const file = crypto.randomBytes(16).toString("hex") + (mime === "image/png" ? ".png" : ".jpg");
+    fs.copyFileSync(f, path.join(MEDIA_DIR, file));
+    return { file, url: "/media/" + file, mime, size: fs.statSync(f).size, width, height, duration: null, name: path.basename(f) };
+  });
+  if (!media.length) throw new HttpError(400, "No encontré láminas en la carpeta.");
+  for (const m of post.media || []) fs.rmSync(path.join(MEDIA_DIR, m.file), { force: true });
+  post.media = media;
+  post.type = media.length > 1 ? "CAROUSEL" : "IMAGE";
+  if (["idea", "review", "rejected"].includes(post.status)) post.status = "review";
+  post.aiReview = null;
+  recheck(post);
+  history(post, note);
+  slotHistory(s, `${note} (${media.length} ${media.length === 1 ? "lámina" : "láminas"})`);
+  return media.length;
+}
+
+app.post("/api/plan/slots/:id/art", (req, res) => {
+  const s = findSlot(req.params.id);
+  const mode = String(req.body?.mode || "");
+  if (!prod.MODES.includes(mode)) throw new HttpError(400, "Modo no válido.");
+  s.art = { ...(s.art || {}), mode };
+  slotHistory(s, mode === "medida" ? "Pieza clave: Claude la diseña a medida" : "Arte con la plantilla de marca");
+  store.save();
+  res.json(s);
+});
+
+app.post("/api/plan/slots/:id/produce", (req, res) => {
+  const s = findSlot(req.params.id);
+  if (s.format === "REEL") { startArt(s, true); store.save(); return res.json(s); }
+  if (!prod.producible(s)) throw new HttpError(400, "Solo se producen carruseles y posts.");
+  if (!prod.available()) throw new HttpError(400, "El productor de artes no está en este equipo (herramientas/produccion/producir.mjs).");
+  if (prod.busy(s.id)) return res.json(s);
+  startArt(s, true);
+  store.save();
+  res.json(s);
+});
+
+// Trae las láminas de la carpeta (p. ej. las que exportaste de Photoshop tras reafinar).
+app.post("/api/plan/slots/:id/art/reload", (req, res) => {
+  const s = findSlot(req.params.id);
+  if (!s.art?.dir) throw new HttpError(400, "Esta pieza aún no tiene carpeta de arte.");
+  const n = attachArt(s, prod.folderLaminas(s.art.dir), "Láminas recargadas desde la carpeta");
+  s.art = { ...s.art, status: "ready", reloadedAt: store.now() };
+  store.save();
+  res.json({ ok: true, count: n });
+});
+
+app.post("/api/plan/slots/:id/art/open", (req, res) => {
+  const s = findSlot(req.params.id);
+  if (!/^(localhost|127\.|::1|\[::1\])/.test(req.hostname)) throw new HttpError(400, "Solo funciona con Taskday en tu equipo.");
+  const target = req.body?.what === "psd" && s.art?.psd && fs.existsSync(s.art.psd) ? s.art.psd : s.art?.dir;
+  if (!target || !fs.existsSync(target)) throw new HttpError(400, "No encuentro la carpeta del arte.");
+  prod.openLocal(target);
+  res.json({ ok: true });
 });
 
 // El agente propone el plan de un periodo. Las propuestas sin aprobar del periodo se sustituyen;
@@ -1291,8 +1485,10 @@ app.use((err, _req, res, _next) => {
 });
 
 const PORT = Number(process.env.PORT) || 4100;
+// En tu PC solo escucha en este mismo equipo (nadie de la Wi-Fi llega). En Render (o con HOST=0.0.0.0) escucha en todas las interfaces.
+const HOST = process.env.HOST || (process.env.RENDER ? "0.0.0.0" : "127.0.0.1");
 if (process.env.NODE_ENV !== "test") {
-  app.listen(PORT, () => console.log(`Taskday listo en http://localhost:${PORT}`));
+  app.listen(PORT, HOST, () => console.log(`Taskday listo en http://localhost:${PORT} (solo ${HOST})`));
   setInterval(tick, 30 * 1000);
   setInterval(maintenance, 3600 * 1000);
   setTimeout(maintenance, 60 * 1000);

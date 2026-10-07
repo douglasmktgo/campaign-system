@@ -36,6 +36,7 @@ const ICONS = {
   inbox: '<path d="M3 13h5l1.5 3h5l1.5-3h5"/><path d="M5 5h14l2 8v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6z"/>',
   moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
+  down: '<path d="m6 9 6 6 6-6"/>',
   more: '<circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="19" cy="12" r="1.3" fill="currentColor"/>',
 };
 const icon = (name, extra = "") =>
@@ -142,11 +143,13 @@ function mediaTag(m, attrs = "") {
 function thumb(post, cls = "thumb") {
   return mediaTag(post?.media[0], `class="${cls}"`);
 }
+const AVATAR_COLORS = ["--violeta", "--lima", "--oro", "--rosa", "--cielo"];
 function avatar(acc, size = "") {
   if (!acc) return `<div class="avatar ${size}">?</div>`;
+  const i = Math.max(0, (state.data?.accounts || []).findIndex((a) => a.id === acc.id));
   return acc.avatar
     ? `<div class="avatar ${size}"><img src="${esc(acc.avatar)}" alt=""></div>`
-    : `<div class="avatar ${size}">${esc((acc.username || "?")[0].toUpperCase())}</div>`;
+    : `<div class="avatar ${size}" style="background:var(${AVATAR_COLORS[i % AVATAR_COLORS.length]})">${esc((acc.username || "?")[0].toUpperCase())}</div>`;
 }
 function scoreBadge(review) {
   if (!review || review.score == null) return "";
@@ -164,27 +167,75 @@ const state = {
   agentReply: null,
   agentProposals: [],
   homeDay: "",
+  pubFocus: "",
+  accountId: "", // cuenta activa: id o "all" (Todas las cuentas, solo en Hoy y Aprobaciones)
+  lastAccountId: "", // última cuenta concreta: la que usan las demás vistas cuando está «Todas»
 };
+
+// ------------------------------------------------------------------ cuenta activa (como en Instagram)
+const ACC_ALL = "all";
+const ALL_VIEWS = ["home", "approvals"];
+try {
+  const saved = JSON.parse(localStorage.getItem("cuenta") || "{}");
+  state.accountId = saved.activa || "";
+  state.lastAccountId = saved.ultima || "";
+} catch {
+  // sin almacenamiento: se elige la cuenta al cargar
+}
+function saveAccount() {
+  try {
+    localStorage.setItem("cuenta", JSON.stringify({ activa: state.accountId, ultima: state.lastAccountId }));
+  } catch {
+    // sin almacenamiento: la cuenta dura hasta recargar
+  }
+}
+// Corrige la cuenta activa si no existe (primera vez, cuenta borrada). Devuelve true si cambió.
+function ensureAccount() {
+  const accs = state.data?.accounts || [];
+  const before = state.accountId + "|" + state.lastAccountId;
+  if (!accountById(state.lastAccountId)) state.lastAccountId = accs.find((a) => (state.data.plan?.slots || []).some((s) => s.accountId === a.id))?.id || accs[0]?.id || "";
+  if (state.accountId === ACC_ALL ? accs.length < 2 : !accountById(state.accountId)) state.accountId = accs.length > 1 && !state.accountId ? ACC_ALL : state.lastAccountId;
+  if (state.accountId !== ACC_ALL) state.lastAccountId = state.accountId;
+  return before !== state.accountId + "|" + state.lastAccountId;
+}
+const allowsAll = (view = state.view) => ALL_VIEWS.includes(view);
+// Ámbito de una vista: "all" o el id de la cuenta que se ve.
+const scopeId = (view = state.view) => (state.accountId === ACC_ALL && allowsAll(view) ? ACC_ALL : state.lastAccountId);
+const activeAccount = () => accountById(state.lastAccountId);
+// Lo que no tiene cuenta asignada se ve en todas.
+const inScope = (accId, view = state.view) => {
+  const s = scopeId(view);
+  return s === ACC_ALL || !accId || accId === s;
+};
+// Con «Todas las cuentas» cada pieza lleva su @usuario.
+const showAcc = () => scopeId() === ACC_ALL;
+const accTag = (a) => (a.demo ? (a.name === "Cuenta manual" || !/^tu\.marca\.demo/.test(a.username) ? "manual" : "prueba") : a.status === "error" ? "revisar" : "");
 
 const accountById = (id) => state.data?.accounts.find((a) => a.id === id);
 const postById = (id) => state.data?.posts.find((p) => p.id === id);
-const pendingProposals = () => (state.data?.proposals || []).filter((p) => p.status === "pending" && postById(p.postId));
-const reviewPosts = () => (state.data?.posts || []).filter((p) => p.status === "review");
+const pendingProposals = () => (state.data?.proposals || []).filter((p) => p.status === "pending" && postById(p.postId) && inScope(postById(p.postId).accountId, "approvals"));
+const reviewPosts = () => (state.data?.posts || []).filter((p) => p.status === "review" && inScope(p.accountId, "approvals"));
 // Propuestas del plan desde hoy: también esperan tu visto bueno.
 const planProposals = () => {
   const t = planToday();
-  return (state.data?.plan?.slots || []).filter((s) => s.status === "proposed" && s.date >= t).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  return (state.data?.plan?.slots || []).filter((s) => s.status === "proposed" && s.date >= t && inScope(s.accountId, "approvals")).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
 };
 const approvalCount = () => pendingProposals().length + reviewPosts().length + planProposals().length;
 
 async function refresh() {
   state.data = await api("/state");
+  if (ensureAccount()) {
+    saveAccount();
+    state.navStale = true;
+  }
+  if ((state.data.plan?.slots || []).some((x) => ["queued", "producing"].includes(x.art?.status))) watchArt();
 }
 
 // ------------------------------------------------------------------ navegación
 const NAV = [
   { id: "home", label: "Hoy", icon: "home" },
   { id: "plan", label: "Plan", icon: "calendar" },
+  { id: "publish", label: "Para publicar", short: "Publicar", icon: "send" },
   { id: "approvals", label: "Aprobaciones", short: "Aprobar", icon: "inbox" },
   { id: "library", label: "Artes", icon: "grid" },
   { id: "calendar", label: "Calendario", icon: "clock" },
@@ -192,15 +243,19 @@ const NAV = [
   { id: "accounts", label: "Cuentas", icon: "instagram" },
   { id: "settings", label: "Ajustes", icon: "gear" },
 ];
-const TOP_NAV = ["home", "plan", "approvals", "library", "calendar", "research"];
-const TAB_NAV = ["home", "plan", "approvals", "library"];
+const TOP_NAV = ["home", "plan", "publish", "approvals", "library", "calendar", "research"];
+const TAB_NAV = ["home", "plan", "publish", "approvals"];
 const navById = (id) => NAV.find((n) => n.id === id);
 
 function go(view) {
+  closeAccMenu();
   state.view = view;
   history.replaceState(null, "", "#" + view);
   render();
-  window.scrollTo({ top: 0 });
+  const focus = view === "publish" && state.pubFocus && document.getElementById("pub-" + state.pubFocus);
+  if (focus) focus.scrollIntoView({ block: "center" });
+  else window.scrollTo({ top: 0 });
+  if (view !== "publish") state.pubFocus = "";
 }
 window.addEventListener("hashchange", () => {
   const v = location.hash.slice(1);
@@ -223,11 +278,13 @@ function toggleTheme() {
 }
 
 function openMore() {
+  const accs = state.data.accounts;
   openSheet(`
     <div class="sheet sheet-sm more-menu">
       <div class="sheet-head"><h2>Más</h2><button class="btn btn-icon" data-close aria-label="Cerrar">${icon("x")}</button></div>
+      ${accs.length ? `<div class="more-acc" role="group" aria-label="Cuenta activa"><div class="acc-menu-h">Cuenta activa</div>${accMenuItems()}</div>` : ""}
       <div class="more-list">
-        ${["calendar", "research", "accounts", "settings"].map((id) => `<button class="more-item" data-go="${id}">${icon(navById(id).icon)}<span>${navById(id).label}</span>${icon("right")}</button>`).join("")}
+        ${["library", "calendar", "research", "accounts", "settings"].map((id) => `<button class="more-item" data-go="${id}">${icon(navById(id).icon)}<span>${navById(id).label}</span>${icon("right")}</button>`).join("")}
         <button class="more-item" data-action="new-post">${icon("plus")}<span>Nuevo arte</span>${icon("right")}</button>
         <button class="more-item" data-action="logout">${icon("logout")}<span>Cerrar sesión</span></button>
       </div>
@@ -251,15 +308,18 @@ function render() {
     return;
   }
   const count = approvalCount();
-  const badge = (id) => (id === "approvals" && count ? `<span class="badge">${count}</span>` : "");
+  const due = publishDueCount();
+  const badge = (id) => (id === "approvals" && count ? `<span class="badge">${count}</span>` : id === "publish" && due ? `<span class="badge">${due}</span>` : "");
   const inMore = !TAB_NAV.includes(state.view);
+  state.navStale = false;
   app.innerHTML = `
     <div class="shell">
       <header class="topbar">
         <button class="brand" data-go="home"><span class="brand-mark"><i></i></span>Taskday</button>
         <nav class="topnav">${TOP_NAV.map((id) => `<button class="${state.view === id ? "on" : ""}" data-go="${id}">${navById(id).label}${badge(id)}</button>`).join("")}</nav>
         <div class="top-actions">
-          <button class="icon-btn hide-m ${state.view === "accounts" ? "on" : ""}" data-go="accounts" title="Cuentas" aria-label="Cuentas">${icon("instagram")}</button>
+          ${accSwitchHtml("hide-m")}
+          ${state.data.accounts.length ? "" : `<button class="icon-btn hide-m ${state.view === "accounts" ? "on" : ""}" data-go="accounts" title="Cuentas" aria-label="Cuentas">${icon("instagram")}</button>`}
           ${themeBtn()}
           <button class="icon-btn hide-m ${state.view === "settings" ? "on" : ""}" data-go="settings" title="Ajustes" aria-label="Ajustes">${icon("gear")}</button>
           <button class="icon-btn hide-m" data-action="logout" title="Cerrar sesión" aria-label="Cerrar sesión">${icon("logout")}</button>
@@ -271,13 +331,14 @@ function render() {
       <nav class="tabbar">
         ${TAB_NAV.map((id) => `<button class="${state.view === id ? "active" : ""}" data-go="${id}">${icon(navById(id).icon)}<span>${navById(id).short || navById(id).label}</span>${badge(id)}</button>`).join("")}
         <button class="${inMore ? "active" : ""}" data-action="more">${icon("more")}<span>Más</span></button>
+        ${accSwitchHtml("tab-acc")}
       </nav>
     </div>`;
 }
 
 function rerenderView() {
   const el = $("#view");
-  if (!el) return render();
+  if (!el || state.navStale) return render();
   // No re-pintamos mientras el usuario escribe en la vista principal.
   if (el.contains(document.activeElement) && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
   el.innerHTML = viewHtml();
@@ -286,10 +347,15 @@ function rerenderView() {
     b.querySelector(".badge")?.remove();
     if (count) b.insertAdjacentHTML("beforeend", `<span class="badge">${count}</span>`);
   });
+  const due = publishDueCount();
+  document.querySelectorAll('.topnav [data-go="publish"], .tabbar [data-go="publish"]').forEach((b) => {
+    b.querySelector(".badge")?.remove();
+    if (due) b.insertAdjacentHTML("beforeend", `<span class="badge">${due}</span>`);
+  });
 }
 
 function viewHtml() {
-  const views = { plan: planView, research: researchView, home: homeView, approvals: approvalsView, library: libraryView, calendar: calendarView, accounts: accountsView, settings: settingsView };
+  const views = { plan: planView, publish: publishView, research: researchView, home: homeView, approvals: approvalsView, library: libraryView, calendar: calendarView, accounts: accountsView, settings: settingsView };
   return (views[state.view] || homeView)();
 }
 
@@ -326,7 +392,10 @@ function bindAuth() {
 const STEPS = ["Aprobar", "Borrador", "Arte", "Programar", "Publicado"];
 const FORMAT_NOUN = { REEL: "el reel", CARRUSEL: "el carrusel", POST: "el post", STORIES: "las stories" };
 const de = (name) => (name.startsWith("el ") ? "del " + name.slice(3) : "de " + name);
-const MILESTONE = { date: "2026-10-20", label: "Días hasta el 20/10" };
+const MILESTONE = { date: "2026-10-20", label: "Días hasta el 20/10", account: "loxita.app" };
+// La cuenta atrás es de una cuenta concreta: solo se ve con ella activa o con «Todas».
+const milestoneOn = () => scopeId() === ACC_ALL || activeAccount()?.username === MILESTONE.account;
+const PRODUCIBLE = ["CARRUSEL", "POST"];
 
 // Devuelve el paso actual (0–4; 5 = terminado), qué botón toca y la frase de la tarea.
 function slotFlow(s) {
@@ -337,13 +406,20 @@ function slotFlow(s) {
   if (s.status === "skipped") return { step: 0, label: "Descartada" };
   if (s.status === "proposed") return { step: 0, act: "approve", label: "Aprobar", todo: `Aprueba ${name}` };
   if (s.format === "STORIES") return { step: 2, act: "slot", label: "Hacer", todo: `Haz ${name} y márcalas como publicadas` };
+  // Carruseles y posts: al aprobar, Claude produce el arte (láminas + PSD) y lo deja en el borrador.
+  if (PRODUCIBLE.includes(s.format) && state.data.settings?.producer && !post?.media?.length) {
+    const st = s.art?.status;
+    if (st === "queued" || st === "producing") return { step: 2, label: "Arte en producción…", todo: `Arte en producción: ${name}`, producing: true };
+    return { step: 2, act: "produce", label: st === "error" ? "Reintentar arte" : "Producir arte", todo: st === "error" ? `El arte ${de(name)} falló: ${s.art.error}` : `Produce el arte ${de(name)}` };
+  }
+  if (s.format === "REEL" && s.art?.status === "encargo" && !post?.media?.length) return { step: 2, act: "slot", label: "Encargo para Claude", todo: `Claude produce ${name} (encargo listo)` };
   if (!post) return { step: 1, act: "draft", label: "Crear borrador", todo: `Crea el borrador ${de(name)}` };
   if (post.status === "idea" || !post.media.length) {
     const verb = s.format === "REEL" ? "Graba y sube" : "Diseña y sube";
     return { step: 2, act: "post", label: "Subir arte", todo: `${verb} ${name}` };
   }
   if (post.status === "review") return { step: 3, act: "post", label: "Validar", todo: `Valida el arte ${de(name)}` };
-  if (post.status === "approved") return { step: 3, act: "post", label: "Programar", todo: `Programa ${name}` };
+  if (post.status === "approved") return autoPublish() ? { step: 3, act: "post", label: "Programar", todo: `Programa ${name}` } : { step: 3, act: "publish", label: "Publicar", todo: `Publica ${name} en Instagram` };
   if (post.status === "rejected" || post.status === "failed") return { step: 3, act: "post", label: "Revisar", todo: `Revisa ${name}: ${post.status === "failed" ? "falló al publicar" : "está rechazado"}` };
   if (post.status === "scheduled") return { step: 4, label: `Programada · ${fmtDate(post.scheduledAt, { month: undefined })}` };
   return { step: 4, label: "Publicando…" };
@@ -359,7 +435,7 @@ const nextBtn = (s, f, cls = "btn-xs") =>
 function planTasks() {
   const from = pAddDays(planToday(), -7);
   return (state.data.plan?.slots || [])
-    .filter((s) => s.date >= from && !["skipped", "published"].includes(s.status))
+    .filter((s) => s.date >= from && inScope(s.accountId, "home") && !["skipped", "published"].includes(s.status))
     .map((s) => ({ s, f: slotFlow(s) }))
     .filter((x) => x.f.act)
     .sort((a, b) => (a.s.date + a.s.time).localeCompare(b.s.date + b.s.time));
@@ -384,7 +460,7 @@ function dayPillsHtml(from, sel, slots, attr) {
 
 function agendaRow(s) {
   const f = slotFlow(s);
-  const multi = state.data.accounts.length > 1;
+  const multi = showAcc();
   return `<div class="ag f-${s.format} st-${s.status} ${f.done ? "done" : ""}" data-plan-open="${s.id}" role="button" tabindex="0">
       <span class="ag-time">${esc(s.time)}</span>
       <span class="ag-main"><strong>${esc(s.theme || "Sin tema")}</strong><small>${pDay(s.date, { weekday: "short", day: "numeric" })} · ${fmtName(s)}${multi ? ` · @${esc(accountById(s.accountId)?.username || "—")}` : ""}${s.production ? ` · ${esc(s.production.slice(0, 48))}` : ""}</small></span>
@@ -454,7 +530,7 @@ function heroSlot({ s, f }, tasks) {
   return `<div class="hero">
       <span class="kicker ${late ? "late" : ""}">${icon(late ? "warn" : "spark")}Lo siguiente · ${whenLabel(s.date)}</span>
       <h2>${esc(f.todo)}</h2>
-      <div class="hero-meta"><span>${pDay(s.date, { weekday: "short", day: "numeric" })} · ${esc(s.time)}</span><span>${fmtName(s)}</span>${s.goal ? `<span>Objetivo: ${esc((GOAL_UI[s.goal] || s.goal).toLowerCase())}</span>` : ""}${s.phase ? `<span>${esc(s.phase)}</span>` : ""}${state.data.accounts.length > 1 ? `<span>@${esc(accountById(s.accountId)?.username || "—")}</span>` : ""}</div>
+      <div class="hero-meta"><span>${pDay(s.date, { weekday: "short", day: "numeric" })} · ${esc(s.time)}</span><span>${fmtName(s)}</span>${s.goal ? `<span>Objetivo: ${esc((GOAL_UI[s.goal] || s.goal).toLowerCase())}</span>` : ""}${s.phase ? `<span>${esc(s.phase)}</span>` : ""}${showAcc() ? `<span>@${esc(accountById(s.accountId)?.username || "—")}</span>` : ""}</div>
       <div class="hero-acts">${nextBtn(s, f, "btn-lg")}<button class="btn btn-soft btn-lg" data-plan-open="${s.id}">Ver ficha</button></div>
       ${stepsHtml(f)}
       ${after.length ? `<div class="hero-after">Después: ${after.map((x) => `<b>${esc(x.f.label)}</b> ${esc(x.s.theme || "")} (${pDay(x.s.date, { weekday: "short", day: "numeric" })})`).join(" · ")}</div>` : ""}
@@ -463,9 +539,10 @@ function heroSlot({ s, f }, tasks) {
 
 function countersHtml() {
   const d = state.data;
-  const slots = d.plan?.slots || [];
-  const scheduled = d.posts.filter((p) => p.status === "scheduled").length;
-  const published = slots.filter((s) => s.status === "published").length + d.posts.filter((p) => p.status === "published" && !(p.planSlotId && slotById(p.planSlotId)?.status === "published")).length;
+  const slots = (d.plan?.slots || []).filter((s) => inScope(s.accountId));
+  const posts = d.posts.filter((p) => inScope(p.accountId));
+  const scheduled = posts.filter((p) => p.status === "scheduled").length;
+  const published = slots.filter((s) => s.status === "published").length + posts.filter((p) => p.status === "published" && !(p.planSlotId && slotById(p.planSlotId)?.status === "published")).length;
   const t = planToday();
   const left = Math.round((Date.parse(MILESTONE.date) - Date.parse(t)) / 86400000);
   const upcoming = slots.filter((s) => s.date >= t && !["skipped", "published"].includes(s.status)).length;
@@ -474,7 +551,7 @@ function countersHtml() {
       ${c("c-oro", approvalCount(), "Por aprobar", "approvals")}
       ${c("c-vio", scheduled, "Programados", "calendar")}
       ${c("c-lima", published, "Publicados", "plan")}
-      ${left >= 0 ? c("c-ink", left, MILESTONE.label, "plan") : c("c-ink", upcoming, "En el plan", "plan")}
+      ${left >= 0 && milestoneOn() ? c("c-ink", left, MILESTONE.label, "plan") : c("c-ink", upcoming, "En el plan", "plan")}
     </div>`;
 }
 
@@ -482,7 +559,7 @@ function countersHtml() {
 function flowLaneHtml() {
   const from = pWeekStart(planToday());
   const to = pAddDays(from, 6);
-  const week = (state.data.plan?.slots || []).filter((s) => s.date >= from && s.date <= to && s.status !== "skipped").sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  const week = (state.data.plan?.slots || []).filter((s) => s.date >= from && s.date <= to && s.status !== "skipped" && inScope(s.accountId)).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
   if (!week.length) return "";
   const cols = STEPS.map(() => []);
   for (const s of week) cols[Math.min(slotFlow(s).step, 4)].push(s);
@@ -501,7 +578,7 @@ function weekCardHtml() {
   const t = planToday();
   const from = pWeekStart(t);
   const sel = state.homeDay && state.homeDay >= from && state.homeDay <= pAddDays(from, 6) ? state.homeDay : t;
-  const all = (state.data.plan?.slots || []).filter((s) => s.status !== "skipped").sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  const all = (state.data.plan?.slots || []).filter((s) => s.status !== "skipped" && inScope(s.accountId)).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
   const day = all.filter((s) => s.date === sel);
   const next = all.filter((s) => s.date > sel && s.status !== "published").slice(0, 3);
   const dayName = sel === t ? "Hoy" : pDay(sel, { weekday: "long", day: "numeric" });
@@ -517,7 +594,7 @@ function weekCardHtml() {
 
 function activityHtml() {
   const d = state.data;
-  const scheduled = d.posts.filter((p) => p.status === "scheduled").sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
+  const scheduled = d.posts.filter((p) => p.status === "scheduled" && inScope(p.accountId)).sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
   return `${scheduled.length ? `<div class="card">
         <h3 class="side-h">${icon("clock")}Programado</h3>
         ${scheduled.slice(0, 4).map((p) => `<div class="list-row" data-open="${p.id}">${thumb(p)}<div class="row-main"><div class="row-title">${esc(p.title)}</div><div class="row-sub">${fmtDate(p.scheduledAt)} · @${esc(accountById(p.accountId)?.username || "—")}</div></div></div>`).join("")}
@@ -530,7 +607,7 @@ function activityHtml() {
 
 function homeView() {
   const d = state.data;
-  const acc = d.accounts.length === 1 ? ` · @${esc(d.accounts[0].username)}` : "";
+  const acc = !d.accounts.length ? "" : scopeId() === ACC_ALL ? " · todas las cuentas" : ` · @${esc(activeAccount()?.username || "")}`;
   return `
     <div class="page-head">
       <div>
@@ -639,7 +716,7 @@ function reviewCard(post) {
 
 function planProposalCard(s) {
   const [fl, fi] = FORMAT_UI[s.format] || FORMAT_UI.POST;
-  const multi = state.data.accounts.length > 1;
+  const multi = showAcc();
   return `
     <div class="ap-card">
       <div class="ap-top">
@@ -698,12 +775,13 @@ const FILTERS = [
   ["issues", "Con problemas"],
 ];
 function libraryView() {
-  const posts = state.data.posts.filter((p) =>
+  const mine = state.data.posts.filter((p) => inScope(p.accountId));
+  const posts = mine.filter((p) =>
     state.filter === "all" ? true : state.filter === "issues" ? ["rejected", "failed"].includes(p.status) : p.status === state.filter
   );
   return `
     <div class="page-head">
-      <div><h1 class="page-title">Artes</h1><p class="page-sub">${state.data.posts.length} en total</p></div>
+      <div><h1 class="page-title">Artes</h1><p class="page-sub">${mine.length} en total${activeAccount() ? ` · @${esc(activeAccount().username)}` : ""}</p></div>
       <button class="btn btn-primary" data-action="new-post">${icon("plus")}Nuevo arte</button>
     </div>
     <div class="toolbar">
@@ -733,6 +811,7 @@ function calendarView() {
   const start = new Date(m);
   start.setDate(1 - ((m.getDay() + 6) % 7)); // semana empieza en lunes
   const events = state.data.posts
+    .filter((p) => inScope(p.accountId))
     .filter((p) => (p.status === "scheduled" && p.scheduledAt) || (p.status === "published" && p.publishedAt))
     .map((p) => ({ post: p, at: new Date(p.status === "scheduled" ? p.scheduledAt : p.publishedAt) }));
   const today = new Date().toDateString();
@@ -781,6 +860,7 @@ function accountsView() {
           <div class="row-sub">${esc(a.name || "")}${a.followers != null ? ` · ${a.followers.toLocaleString("es")} seguidores` : ""}</div>
           <div class="row-sub" style="margin-top:4px">${profileComplete(a) ? `${esc(a.profile.kind || "Perfil")} · ${esc((a.profile.about || "").slice(0, 70))}` : `<span style="color:var(--orange)">Falta el perfil de marca</span>`}${a.canResearch ? ` · <span style="color:var(--green)">métricas de referencias activas</span>` : ""}</div>
         </div>
+        ${a.id === state.lastAccountId && state.accountId !== ACC_ALL ? `<span class="pill pill-approved">Activa</span>` : `<button class="btn" data-acc-pick="${a.id}">Usar</button>`}
         <button class="btn ${profileComplete(a) ? "" : "btn-primary"}" data-profile="${a.id}">Perfil de marca</button>
         <button class="btn" data-test-account="${a.id}">Probar</button>
         <button class="btn btn-icon btn-danger" data-remove-account="${a.id}" aria-label="Desconectar">${icon("trash")}</button>
@@ -791,7 +871,7 @@ function accountsView() {
           <button class="btn btn-primary" data-action="connect">Conectar Instagram</button>
           <button class="btn" data-action="demo-account">Usar cuenta de prueba</button>
         </div></div>`}
-    ${accs.length ? `<div style="margin-top:14px"><button class="btn btn-ghost" data-action="demo-account">${icon("plus")}Añadir cuenta de prueba</button></div>` : ""}`;
+    ${accs.length ? `<div style="margin-top:14px"><button class="btn btn-ghost" data-action="demo-account">${icon("plus")}Añadir cuenta manual (publicas tú)</button></div>` : ""}`;
 }
 
 function openConnect() {
@@ -836,6 +916,12 @@ const PROFILE_UI = [
   ["pillars", "Temas principales", "Ej.: Antes y después de marcas, consejos de diseño, proceso creativo, casos de clientes."],
   ["cta", "Llamadas a la acción y captación de leads", "Ej.: «Escríbeme MARCA por DM», link en bio a formulario, guardar el post."],
   ["avoid", "Qué evitar", "Ej.: Política, memes vulgares, prometer resultados que no se pueden garantizar."],
+  ["language", "Idiomas", "Ej.: Español como voz principal y una línea corta en portugués al final del copy."],
+  ["mix", "Mezcla de contenido", "Ej.: 30 % entrenos, 20 % día a día, 25 % diseño + IA, 15 % frases, 10 % construyendo mi app."],
+  ["routine", "Rutina y vida real", "Ej.: Bici los martes y sábados, gym por la mañana, trabajo desde casa, cafés favoritos…"],
+  ["brands", "Marcas propias y publicidad", "Ej.: Mi app sale como proceso, nunca como anuncio. Publis pagadas: marcadas y como máximo 1 de cada 8 posts."],
+  ["visual", "Identidad visual", "Ej.: Paleta, fuentes, filtro de fotos (temperatura, grano, sombras) y plantillas de arte."],
+  ["references", "Referencias e inspiración", "Ej.: @cuenta1 (fotos), @cuenta2 (artes con frases) y qué te gusta de cada una."],
 ];
 
 function profileComplete(a) {
@@ -855,6 +941,11 @@ function openProfile(accId) {
           <div class="field"><label>Tipo de cuenta</label>
             <select class="select" name="kind"><option value="">Elige…</option>${PROFILE_KINDS.map((k) => `<option ${p.kind === k ? "selected" : ""}>${k}</option>`).join("")}</select></div>
           ${PROFILE_UI.map(([k, label, ph]) => `<div class="field"><label>${label}</label><textarea class="textarea" style="min-height:64px" name="${k}" placeholder="${esc(ph)}">${esc(p[k] || "")}</textarea></div>`).join("")}
+          <div class="field"><label>Producción de artes</label>
+            <input class="input" name="prod_carpeta" placeholder="Carpeta de esta cuenta (vacío = la carpeta de Loxita)" value="${esc(a.produccion?.carpeta || "")}">
+            <input class="input" name="prod_estilo" style="margin-top:6px" placeholder="Estilo de las artes (vacío = loxita)" value="${esc(a.produccion?.estilo || "")}">
+            <textarea class="textarea" name="prod_reglasVideo" style="min-height:56px;margin-top:6px" placeholder="Reglas para los encargos de reels de esta cuenta (vacío = reglas de Loxita)">${esc(a.produccion?.reglasVideo || "")}</textarea>
+          </div>
           <div class="field"><label>Guía de contenido</label>
             <textarea class="textarea" name="guide" placeholder="Pega aquí tu guía: lo que quieres, ejemplos que te gustan, reglas de marca… El agente la seguirá al pie de la letra.">${esc(p.guide || "")}</textarea>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
@@ -871,11 +962,13 @@ function openProfile(accId) {
       </form>
     </div>`);
   const form = $("#profile-form");
-  const values = () => Object.fromEntries([...new FormData(form).entries()]);
+  const values = () => Object.fromEntries([...new FormData(form).entries()].filter(([k]) => !k.startsWith("prod_")));
+  const prodValues = () => Object.fromEntries([...new FormData(form).entries()].filter(([k]) => k.startsWith("prod_")).map(([k, v]) => [k.slice(5), v]));
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     busy(form.querySelector('[type="submit"]'), async () => {
       await api(`/accounts/${accId}/profile`, { method: "PUT", body: values() });
+      await api(`/accounts/${accId}/produccion`, { method: "PUT", body: prodValues() });
       await refresh();
       closeSheet();
       rerenderView();
@@ -920,7 +1013,7 @@ function openProfile(accId) {
 }
 
 // ------------------------------------------------------------------ Investigación
-const research = { images: [], count: 8, web: true, accountId: "", draft: {} };
+const research = { images: [], count: 8, web: true, draft: {} };
 
 function researchView() {
   const accs = state.data.accounts;
@@ -928,10 +1021,9 @@ function researchView() {
     return `<div class="page-head"><div><h1 class="page-title">Investigación</h1></div></div>
       <div class="card empty">${icon("flask")}<h3>Conecta una cuenta primero</h3><p>La investigación se hace para una cuenta concreta y su perfil de marca.</p><button class="btn btn-primary" data-go="accounts">Ir a Cuentas</button></div>`;
   }
-  if (!accountById(research.accountId)) research.accountId = accs[0].id;
-  const acc = accountById(research.accountId);
+  const acc = activeAccount() || accs[0];
   const anyReader = accs.some((a) => a.canResearch);
-  const runs = state.data.research || [];
+  const runs = (state.data.research || []).filter((r) => r.accountId === acc.id);
   const hasAI = state.data.settings.hasAnthropic;
   return `
     <div class="page-head"><div>
@@ -942,7 +1034,7 @@ function researchView() {
     <form class="card research-form" id="research-form">
       <div class="research-for">
         <span class="muted small">Investigar para</span>
-        <div class="segmented">${accs.map((a) => `<button type="button" class="${a.id === acc.id ? "on" : ""}" data-res-account="${a.id}">@${esc(a.username)}</button>`).join("")}</div>
+        <span class="res-acc">${avatar(acc, "avatar-xs")}@${esc(acc.username)}</span>
         ${profileComplete(acc) ? `<span class="small" style="color:var(--green)">${icon("checkCircle", 'style="width:14px;height:14px;vertical-align:-2px"')} Perfil de marca listo</span>` : `<button type="button" class="btn btn-ghost small" data-profile="${acc.id}">${icon("warn", 'style="width:14px;height:14px"')} Completa su perfil de marca</button>`}
       </div>
       <div class="grid grid-2" style="gap:14px">
@@ -1143,7 +1235,7 @@ async function submitResearch(form) {
     for (const f of research.images) images.push(await uploadOne(f, () => {}));
     const r = await api("/research", {
       body: {
-        accountId: research.accountId,
+        accountId: activeAccount()?.id,
         references: form.references.value,
         hashtags: form.hashtags.value,
         ideas: form.ideas.value,
@@ -1189,7 +1281,7 @@ const GOAL_UI = { seguidores: "Seguidores", leads: "Leads", comunidad: "Comunida
 const METRIC_UI = { views: "Reproducciones", likes: "Me gusta", comments: "Comentarios", saves: "Guardados", shares: "Compartidos", follows: "Seguidores nuevos", signups: "Registros" };
 const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
-const planState = { accountId: "", mode: "week", cursor: "", day: "" };
+const planState = { mode: "week", cursor: "", day: "" };
 
 const planTz = () => state.data.plan?.timezone || "America/Sao_Paulo";
 const planToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: planTz() }).format(new Date());
@@ -1220,8 +1312,7 @@ function planView() {
       <div class="card empty">${icon("calendar")}<h3>Primero, una cuenta</h3><p>Conecta tu Instagram o crea una cuenta de prueba con el mismo nombre de usuario: al conectar la real, hereda el plan.</p>
       <button class="btn btn-primary" data-go="accounts" style="margin-top:8px">Ir a Cuentas</button></div>`;
   }
-  const acc = accountById(planState.accountId) || accs.find((a) => planSlots(a.id).length) || accs[0];
-  planState.accountId = acc.id;
+  const acc = activeAccount() || accs[0];
   if (!planState.cursor) planState.cursor = planToday();
   const slots = planSlots(acc.id);
   const today = planToday();
@@ -1277,7 +1368,6 @@ function planView() {
     <div class="plan">
       <aside class="plan-side">
         <h2 class="side-title">${isThisWeek ? "Esta semana" : `Semana del ${pDay(wFrom, { day: "numeric", month: "short" })}`}</h2>
-        ${accs.length > 1 ? `<div class="side-accounts">${accs.map((a) => `<button class="chip ${a.id === acc.id ? "chip-on" : ""}" data-plan-account="${a.id}">@${esc(a.username)}</button>`).join("")}</div>` : ""}
         <div class="todo-card">
           <p>${sentence}</p>
           ${byFormat.length ? `<div class="tags">${byFormat.map(([k, n]) => `<span class="ftag ft-${k}">${FORMAT_UI[k][0]} ${n}</span>`).join("")}</div>` : ""}
@@ -1287,7 +1377,7 @@ function planView() {
           ${counter("c-rosa", nMake, "Borrador o arte por hacer")}
           ${counter("c-vio", nScheduled, "Programadas")}
           ${counter("c-lima", nPublished, "Publicadas")}
-          ${left >= 0 ? counter("c-ink", left, MILESTONE.label) : ""}
+          ${left >= 0 && milestoneOn() ? counter("c-ink", left, MILESTONE.label) : ""}
         </div>
         <div class="side-acts">
           ${toApprove.length ? `<button class="btn btn-primary" data-plan-approve-all="${toApprove.map((s) => s.id).join(",")}">${icon("check")}Aprobar ${toApprove.length === 1 ? "la propuesta" : `las ${toApprove.length}`}</button>` : ""}
@@ -1449,12 +1539,77 @@ function slotFlowHtml(s) {
   const f = slotFlow(s);
   return `<div class="slot-flow">${f.act ? `<div class="slot-flow-next">${esc(f.todo)}<small>Siguiente paso · ${whenLabel(s.date)}</small></div>` : `<div class="slot-flow-next">${esc(f.label)}</div>`}${stepsHtml(f)}</div>`;
 }
+// Arte producido por Claude: estado, modo (plantilla o a medida), carpeta y PSD.
+function slotArtHtml(s) {
+  if (s.format === "REEL" && !["proposed", "skipped"].includes(s.status)) {
+    const a = s.art || {}, local = /^(localhost|127.|[::1])/.test(location.hostname);
+    const st = a.status === "encargo" ? `Encargo para Claude${a.requestedAt ? " · " + fmtDate(a.requestedAt) : ""}` : a.status === "error" ? "Falló: " + (a.error || "") : "Sin encargo todavía";
+    return `
+    <div class="slot-art ${a.status || ""}">
+      <div class="slot-art-head"><strong>Video</strong><span>${esc(st)}</span></div>
+      <p class="muted small">Al aprobar un reel, Taskday le deja a Claude un encargo con tus notas. Claude lo anima en Remotion (pantallas reales + Loxita) y sube el MP4 al borrador.</p>
+      ${a.brief ? `<div class="muted small slot-art-dir" title="${esc(a.brief)}">${esc(a.brief)}</div>` : ""}
+      <div class="slot-art-actions">
+        <button type="button" class="btn btn-xs btn-primary" data-slot="art-produce">${a.brief ? "Actualizar encargo" : "Crear encargo"}</button>
+        ${a.dir && local ? `<button type="button" class="btn btn-xs" data-slot="art-folder">Abrir carpeta</button>` : ""}
+      </div>
+    </div>`;
+  }
+  if (!PRODUCIBLE.includes(s.format) || !state.data.settings?.producer || s.status === "proposed" || s.status === "skipped") return "";
+  const a = s.art || {};
+  const local = /^(localhost|127\.|\[::1\])/.test(location.hostname);
+  const medida = a.mode === "medida";
+  const status = {
+    queued: "En cola para producir…",
+    producing: "Produciendo láminas y PSD…",
+    ready: `Listo${a.producedAt ? " · " + fmtDate(a.producedAt) : ""}${a.fuente === "claude" ? " · diseño a medida" : " · plantilla de marca"}`,
+    error: "Falló: " + (a.error || ""),
+  }[a.status] || "Sin producir todavía";
+  return `
+    <div class="slot-art ${a.status || ""}">
+      <div class="slot-art-head"><strong>Arte</strong><span>${esc(status)}</span></div>
+      <div class="seg" role="group" aria-label="Cómo se diseña">
+        <button type="button" class="${medida ? "" : "on"}" data-slot="art-plantilla">Plantilla automática</button>
+        <button type="button" class="${medida ? "on" : ""}" data-slot="art-medida">Pieza clave · a medida</button>
+      </div>
+      <p class="muted small">${medida ? "Claude la diseña a medida en una sesión (pídeselo). «Producir» usa su diseño si ya lo dejó en la carpeta; si no, la plantilla." : "Al aprobar se dibujan las láminas con la plantilla de marca y se monta el PSD por capas en Photoshop."}</p>
+      ${a.warnings?.length ? `<div class="note note-warn small">${a.warnings.map(esc).join("<br>")}</div>` : ""}
+      ${a.dir ? `<div class="muted small slot-art-dir" title="${esc(a.dir)}">${esc(a.dir)}</div>` : ""}
+      <div class="slot-art-actions">
+        <button type="button" class="btn btn-xs btn-primary" data-slot="art-produce" ${a.status === "queued" || a.status === "producing" ? "disabled" : ""}>${a.status === "ready" ? "Volver a producir" : "Producir ahora"}</button>
+        ${a.dir ? `<button type="button" class="btn btn-xs" data-slot="art-reload" title="Trae las láminas de la carpeta laminas/ (las que exportas tras reafinar)">Recargar desde la carpeta</button>` : ""}
+        ${a.dir && local ? `<button type="button" class="btn btn-xs" data-slot="art-folder">Abrir carpeta</button>` : ""}
+        ${a.psd && local ? `<button type="button" class="btn btn-xs" data-slot="art-psd">Abrir PSD</button>` : ""}
+      </div>
+    </div>`;
+}
+// Mientras haya arte en producción, refresca cada 5 s.
+var artTimer = null; // var: refresh() puede llamar a watchArt() antes de llegar a esta línea
+function watchArt() {
+  if (artTimer) return;
+  const working = () => (state.data.plan?.slots || []).filter((x) => ["queued", "producing"].includes(x.art?.status)).map((x) => x.id);
+  artTimer = setInterval(async () => {
+    const before = working();
+    if (!before.length) {
+      clearInterval(artTimer);
+      artTimer = null;
+      return;
+    }
+    await refresh();
+    for (const id of before) {
+      const x = slotById(id);
+      if (x?.art?.status === "ready") toast(`Arte listo: «${x.theme}» · revísalo en el borrador`, "success");
+      if (x?.art?.status === "error") toast(`El arte de «${x.theme}» falló: ${x.art.error}`, "error");
+    }
+    if (!$("#slot-sheet")) rerenderView();
+  }, 5000);
+}
 function openSlot(id, preset = {}) {
   const existing = id ? slotById(id) : null;
   const s = existing || { date: preset.date || pAddDays(planToday(), 1), time: preset.time || "19:00", format: "REEL", goal: "leads", status: preset.status || "approved", outline: [], hashtags: [], metrics: {}, history: [] };
   const isNew = !existing;
   const asPublished = s.status === "published";
-  const acc = accountById(existing?.accountId || planState.accountId);
+  const acc = accountById(existing?.accountId) || activeAccount();
   const opt = (list, val) => list.map(([v, l]) => `<option value="${v}" ${v === val ? "selected" : ""}>${l}</option>`).join("");
   openSheet(`
     <div class="sheet sheet-md" id="slot-sheet">
@@ -1468,6 +1623,7 @@ function openSlot(id, preset = {}) {
       <form id="slot-form">
         <div class="sheet-body">
           ${isNew ? "" : slotFlowHtml(s)}
+          ${isNew ? "" : slotArtHtml(s)}
           ${s.why ? `<div class="note note-info small"><strong>Por qué:</strong> ${esc(s.why)}</div>` : ""}
           <div class="grid grid-3" style="gap:12px">
             <div class="field"><label>Día</label><input class="input" type="date" name="date" value="${esc(s.date)}" required></div>
@@ -1574,6 +1730,27 @@ function bindSlot(slot, acc, asPublished) {
         await api(`/plan/slots/${slot.id}`, { method: "DELETE" });
         return done("Eliminada");
       }
+      if (act === "art-produce") {
+        if (dirty()) await api(`/plan/slots/${slot.id}`, { method: "PATCH", body: slotValues(form, asPublished) });
+        await api(`/plan/slots/${slot.id}/produce`, { body: {} });
+        watchArt();
+        return done("Produciendo el arte (1–2 min con Photoshop)");
+      }
+      if (act === "art-reload") {
+        const r = await api(`/plan/slots/${slot.id}/art/reload`, { body: {} });
+        return done(`${r.count} ${r.count === 1 ? "lámina recargada" : "láminas recargadas"} desde la carpeta`);
+      }
+      if (act === "art-folder" || act === "art-psd") {
+        await api(`/plan/slots/${slot.id}/art/open`, { body: { what: act === "art-psd" ? "psd" : "dir" } });
+        return toast(act === "art-psd" ? "Abriendo el PSD en Photoshop" : "Abriendo la carpeta");
+      }
+      if (act === "art-medida" || act === "art-plantilla") {
+        await api(`/plan/slots/${slot.id}/art`, { body: { mode: act.slice(4) } });
+        await refresh();
+        closeSheet();
+        rerenderView();
+        return openSlot(slot.id);
+      }
       if (act === "draft") {
         if (dirty()) await api(`/plan/slots/${slot.id}`, { method: "PATCH", body: slotValues(form, asPublished) });
         const post = await api(`/plan/slots/${slot.id}/draft`, { body: {} });
@@ -1588,7 +1765,7 @@ function bindSlot(slot, acc, asPublished) {
 
 // ---------- pedir plan o revisión al agente ----------
 function openPlanAgent(kind) {
-  const acc = accountById(planState.accountId);
+  const acc = activeAccount();
   const hasAI = state.data.settings.hasAnthropic;
   const t = planToday();
   const endOfMonth = pAddDays(pAddDays(t.slice(0, 8) + "01", 32).slice(0, 8) + "01", -1);
@@ -1632,7 +1809,7 @@ function openPlanAgent(kind) {
 async function importPlan(file) {
   try {
     const data = JSON.parse(await file.text());
-    const acc = accountById(planState.accountId);
+    const acc = activeAccount();
     if (!confirm(`¿Importar ${data.slots?.length || 0} tarjetas en @${acc.username}? Sustituye las tarjetas actuales de esta cuenta (salvo las que ya tienen borrador).`)) return;
     const r = await api("/plan/import", { body: { accountId: acc.id, data, replace: true, includeProfile: !profileComplete(acc) } });
     await refresh();
@@ -1644,7 +1821,7 @@ async function importPlan(file) {
 }
 
 document.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-slot-next],[data-plan-skip],[data-plan-pick],[data-plan-new-slot],[data-home-day],[data-ap-tab],[data-plan-open],[data-plan-approve],[data-plan-approve-all],[data-plan-mode],[data-plan-move],[data-plan-account],[data-plan-action],[data-plan-change],[data-plan-new-date],[data-plan-day],[data-plan-focus]");
+  const t = e.target.closest("[data-slot-next],[data-plan-skip],[data-plan-pick],[data-plan-new-slot],[data-home-day],[data-ap-tab],[data-plan-open],[data-plan-approve],[data-plan-approve-all],[data-plan-mode],[data-plan-move],[data-plan-action],[data-plan-change],[data-plan-new-date],[data-plan-day],[data-plan-focus]");
   if (!t || t.closest(".sheet")) return;
   if (t.dataset.slotNext) {
     e.stopPropagation();
@@ -1677,7 +1854,12 @@ document.addEventListener("click", (e) => {
   if (t.dataset.planFocus) {
     const s = slotById(t.dataset.planFocus);
     if (s) {
-      planState.accountId = s.accountId;
+      if (accountById(s.accountId) && s.accountId !== state.lastAccountId) {
+        state.lastAccountId = s.accountId;
+        if (state.accountId !== ACC_ALL) state.accountId = s.accountId;
+        saveAccount();
+        state.navStale = true;
+      }
       planState.cursor = s.date;
       planState.mode = "week";
     }
@@ -1715,10 +1897,6 @@ document.addEventListener("click", (e) => {
     planState.day = "";
     return rerenderView();
   }
-  if (t.dataset.planAccount) {
-    planState.accountId = t.dataset.planAccount;
-    return rerenderView();
-  }
   if (t.dataset.planChange) {
     const [rid, cid, decision] = t.dataset.planChange.split(":");
     return busy(t, async () => {
@@ -1746,7 +1924,20 @@ function slotNext(id, btn) {
       await api(`/plan/slots/${id}/status`, { body: { status: "approved" } });
       await refresh();
       rerenderView();
-      toast("Aprobada · siguiente paso: crear el borrador");
+      const art = slotById(id)?.art?.status;
+      if (art === "queued" || art === "producing") {
+        watchArt();
+        toast("Aprobada · arte en producción (láminas + PSD)");
+      } else toast("Aprobada · siguiente paso: crear el borrador");
+    });
+  }
+  if (f.act === "produce") {
+    return busy(btn, async () => {
+      await api(`/plan/slots/${id}/produce`, { body: {} });
+      await refresh();
+      rerenderView();
+      watchArt();
+      toast("Produciendo el arte (1–2 min con Photoshop)");
     });
   }
   if (f.act === "draft") {
@@ -1759,10 +1950,129 @@ function slotNext(id, btn) {
     });
   }
   if (f.act === "post") return openPost(s.postId);
+  if (f.act === "publish") {
+    state.pubFocus = id;
+    return go("publish");
+  }
   openSlot(id);
 }
 document.addEventListener("change", (e) => {
   if (e.target.id === "plan-import" && e.target.files[0]) importPlan(e.target.files[0]);
+});
+
+// ------------------------------------------------------------------ Para publicar (a mano)
+// Sin una cuenta de Instagram conectada y una URL pública, Taskday no puede publicar solo:
+// aquí queda cada pieza aprobada con su día y hora, el arte para descargar y el copy para copiar.
+function autoPublish() {
+  return !/^(localhost|127\.|\[::1\])/.test(location.hostname) && state.data.accounts.some((a) => !a.demo && a.status !== "error");
+}
+function publishSlots() {
+  return (state.data.plan?.slots || [])
+    .filter((s) => !["proposed", "skipped", "published"].includes(s.status) && inScope(s.accountId, "publish"))
+    .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+}
+const slotMedia = (s) => (s.postId && postById(s.postId)?.media) || [];
+const slotReady = (s) => s.format === "STORIES" || slotMedia(s).length > 0;
+function publishDueCount() {
+  if (!state.data) return 0;
+  const t = planToday();
+  return publishSlots().filter((s) => s.date <= t && slotReady(s)).length;
+}
+function publishText(s) {
+  const post = s.postId && postById(s.postId);
+  if (post?.caption?.trim()) return post.caption.trim();
+  if (s.format === "STORIES" && !s.caption) return (s.outline || []).join("\n");
+  return [s.caption, (s.hashtags || []).join(" ")].filter(Boolean).join("\n\n");
+}
+async function copyText(text, msg = "Copiado") {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position:fixed;opacity:0";
+    document.body.append(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  }
+  toast(msg, "success");
+}
+
+function pubCard(s, today) {
+  const [fl, fi] = FORMAT_UI[s.format] || FORMAT_UI.POST;
+  const media = slotMedia(s);
+  const text = publishText(s);
+  const late = s.date < today;
+  const stories = s.format === "STORIES";
+  const when = pDay(s.date, { weekday: "long", day: "numeric", month: "short" });
+  const art = media.length
+    ? `<div class="pub-thumbs">${media.map((m, i) => `<a href="${esc(m.url)}" download title="Descargar ${i + 1}">${mediaTag(m, 'class="pub-thumb"')}</a>`).join("")}</div>
+       <div class="muted small">${media.length === 1 ? "Toca el arte para descargarlo" : `${media.length} archivos · toca cada uno para descargarlo`}</div>`
+    : stories
+      ? `<div class="pub-noart">${icon("stories")}<div><strong>Stories</strong><small>Grábalas en el momento siguiendo el guion.</small></div></div>`
+      : s.art?.status === "encargo"
+        ? `<div class="pub-noart">${icon("image")}<div><strong>Video encargado a Claude</strong><small>Lo anima en la próxima sesión y lo sube aquí.</small></div></div>`
+      : ["queued", "producing"].includes(s.art?.status)
+        ? `<div class="pub-noart">${icon("image")}<div><strong>Arte en producción</strong><small>Claude está dibujando las láminas y montando el PSD.</small></div></div>`
+        : `<div class="pub-noart">${icon("image")}<div><strong>Falta el arte</strong><small>${esc(s.art?.status === "error" ? "Falló la producción: " + s.art.error : s.production || "Diséñalo y súbelo al borrador.")}</small></div></div>`;
+  return `
+    <div class="card pub ${slotReady(s) ? "" : "pub-wait"} ${state.pubFocus === s.id ? "pub-focus" : ""}" id="pub-${s.id}">
+      <div class="pub-head">
+        <div class="pub-when"><b>${when[0].toUpperCase() + when.slice(1)}</b><span>${esc(s.time)} <small>hora de Brasília</small></span></div>
+        <span class="ftag ft-${s.format}">${icon(fi)}${fl}</span>
+        ${late ? `<span class="pub-late">atrasada</span>` : s.date === today ? `<span class="pub-today">hoy</span>` : ""}
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto" data-plan-open="${s.id}">Ver ficha</button>
+      </div>
+      <h3 class="pub-title">${esc(s.theme || "Sin tema")}</h3>
+      <div class="pub-body">
+        <div class="pub-art">${art}</div>
+        <div class="pub-copy">
+          <div class="pub-text">${text ? esc(text) : '<span class="muted">Sin copy todavía. Escríbelo en la ficha.</span>'}</div>
+          <div class="pub-acts">
+            ${text ? `<button class="btn btn-primary" data-pub-copy="${s.id}">${icon("doc")}${stories ? "Copiar guion" : "Copiar copy + hashtags"}</button>` : ""}
+            ${s.hashtags?.length ? `<button class="btn" data-pub-tags="${s.id}">Solo hashtags</button>` : ""}
+          </div>
+        </div>
+      </div>
+      <div class="pub-foot">
+        <input class="input" data-pub-url="${s.id}" placeholder="Enlace del post en Instagram (opcional)">
+        <button class="btn ${slotReady(s) ? "btn-primary" : ""}" data-pub-done="${s.id}">${icon("check")}Ya lo publiqué</button>
+      </div>
+    </div>`;
+}
+
+function publishView() {
+  const today = planToday();
+  const all = publishSlots();
+  const now = all.filter((s) => s.date <= today);
+  const next = all.filter((s) => s.date > today);
+  const props = (state.data.plan?.slots || []).filter((s) => s.status === "proposed" && inScope(s.accountId)).length;
+  const group = (title, list) => (list.length ? `<div class="section-title">${title}<span class="count">${list.length}</span></div>${list.map((s) => pubCard(s, today)).join("")}` : "");
+  return `
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">Para publicar</h1>
+        <p class="page-sub">Lo aprobado, con su día y hora sugerida. Descarga el arte, copia el texto, publícalo en Instagram y márcalo aquí.</p>
+      </div>
+    </div>
+    ${props ? `<div class="note note-info" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><div style="flex:1;min-width:200px">Hay <strong>${props}</strong> ${props === 1 ? "propuesta" : "propuestas"} del plan sin aprobar. Solo aparecen aquí cuando las apruebas.</div><button class="btn" data-go="approvals">Ir a Aprobaciones</button></div>` : ""}
+    ${all.length ? group("Hoy y atrasadas", now) + group("Próximas", next) : `<div class="card empty">${icon("send")}<h3>Nada aprobado por publicar</h3><p>Aprueba piezas del plan y aparecerán aquí con su copy listo.</p><button class="btn btn-primary" data-go="plan">Abrir el plan</button></div>`}`;
+}
+
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-pub-copy],[data-pub-tags],[data-pub-done]");
+  if (!t) return;
+  if (t.dataset.pubCopy) return copyText(publishText(slotById(t.dataset.pubCopy)), "Copiado · pégalo en Instagram");
+  if (t.dataset.pubTags) return copyText((slotById(t.dataset.pubTags).hashtags || []).join(" "), "Hashtags copiados");
+  const id = t.dataset.pubDone;
+  busy(t, async () => {
+    const url = document.querySelector(`[data-pub-url="${id}"]`)?.value.trim() || "";
+    await api(`/plan/slots/${id}/status`, { body: { status: "published", publishedUrl: url } });
+    await refresh();
+    rerenderView();
+    toast("Marcada como publicada · en 48 h apunta sus números en el Plan", "success");
+  });
 });
 
 // ------------------------------------------------------------------ Ajustes
@@ -1805,6 +2115,138 @@ function settingsView() {
       <div style="margin-top:16px"><button class="btn btn-primary btn-lg" type="submit">Guardar cambios</button></div>
     </form>`;
 }
+
+// ------------------------------------------------------------------ selector de cuenta
+// Un clic abre la lista; doble clic pasa a la siguiente cuenta (como en Instagram).
+function accStackHtml() {
+  return `<span class="acc-stack">${state.data.accounts.slice(0, 2).map((a) => avatar(a)).join("")}</span>`;
+}
+function accSwitchHtml(cls) {
+  const accs = state.data.accounts;
+  if (!accs.length) return "";
+  const all = scopeId() === ACC_ALL;
+  const acc = activeAccount();
+  const name = all ? "Todas las cuentas" : "@" + (acc?.username || "");
+  const tab = cls === "tab-acc";
+  return `<button class="${tab ? "tab-acc" : "acc-switch " + cls}" data-acc-switch aria-haspopup="menu" aria-expanded="false" aria-label="Cuenta activa: ${esc(name)}. Cambiar de cuenta" title="${esc(name)} · clic: cambiar · doble clic: siguiente cuenta">
+      ${all ? accStackHtml() : avatar(acc)}${tab ? "<span>Cuenta</span>" : `<span class="acc-handle">${esc(name)}</span>${icon("down", 'class="chev"')}`}
+    </button>`;
+}
+function accMenuItems() {
+  const accs = state.data.accounts;
+  const cur = scopeId();
+  const item = (id, pic, title, sub, tag) => {
+    const on = cur === id;
+    return `<button class="acc-item" role="menuitemradio" aria-checked="${on}" data-acc-pick="${id}">
+        ${pic}<span class="acc-txt"><b>${title}${tag ? `<span class="acc-tag">${tag}</span>` : ""}</b>${sub ? `<small>${sub}</small>` : ""}</span>
+        <span class="acc-check">${on ? icon("check") : ""}</span>
+      </button>`;
+  };
+  return [
+    accs.length > 1 && allowsAll() ? item(ACC_ALL, accStackHtml(), "Todas las cuentas", "Solo en Hoy y Aprobaciones", "") : "",
+    ...accs.map((a) => item(a.id, avatar(a), "@" + esc(a.username), esc(a.name && !["Cuenta manual", "Cuenta de prueba"].includes(a.name) ? a.name : a.demo ? "Publicas tú a mano" : ""), accTag(a))),
+  ].join("");
+}
+let accMenuEl = null;
+let accMenuBtn = null;
+let accClickTimer;
+function closeAccMenu(refocus) {
+  if (!accMenuEl) return;
+  accMenuEl.remove();
+  accMenuEl = null;
+  accMenuBtn?.setAttribute("aria-expanded", "false");
+  if (refocus && accMenuBtn?.isConnected) accMenuBtn.focus();
+  accMenuBtn = null;
+}
+function openAccMenu(btn) {
+  closeAccMenu();
+  accMenuBtn = btn;
+  const el = document.createElement("div");
+  el.className = "acc-menu";
+  el.setAttribute("role", "menu");
+  el.setAttribute("aria-label", "Cambiar de cuenta");
+  el.innerHTML = `<div class="acc-menu-h">Cambiar de cuenta</div>
+    ${accMenuItems()}
+    <div class="acc-sep" role="separator"></div>
+    <button class="acc-item acc-add" role="menuitem" data-go="accounts"><span class="acc-plus">${icon("plus")}</span><span class="acc-txt"><b>Añadir cuenta</b><small>Y gestionar las que tienes</small></span></button>
+    <div class="acc-hint">Doble clic en el avatar: siguiente cuenta</div>`;
+  document.body.appendChild(el);
+  const r = btn.getBoundingClientRect();
+  const w = Math.min(300, innerWidth - 32);
+  el.style.width = w + "px";
+  el.style.left = Math.min(Math.max(16, r.right - w), innerWidth - 16 - w) + "px";
+  if (r.top > innerHeight / 2) el.style.bottom = innerHeight - r.top + 10 + "px";
+  else el.style.top = r.bottom + 10 + "px";
+  accMenuEl = el;
+  btn.setAttribute("aria-expanded", "true");
+  (el.querySelector('[aria-checked="true"]') || el.querySelector(".acc-item"))?.focus();
+}
+function setAccount(id, msg = true) {
+  if (id !== ACC_ALL && !accountById(id)) return;
+  state.accountId = id;
+  if (id !== ACC_ALL) state.lastAccountId = id;
+  saveAccount();
+  const hadFocus = accMenuEl || document.activeElement?.closest?.("[data-acc-switch]");
+  closeAccMenu();
+  render();
+  if (hadFocus) [...document.querySelectorAll("[data-acc-switch]")].find((b) => b.offsetParent)?.focus();
+  if (msg) toast(id === ACC_ALL ? "Viendo todas las cuentas" : `Ahora en @${accountById(id).username}`);
+}
+function nextAccount() {
+  const accs = state.data.accounts;
+  if (accs.length < 2) return;
+  const i = accs.findIndex((a) => a.id === state.lastAccountId);
+  setAccount(accs[(i + 1) % accs.length].id);
+}
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-acc-switch],[data-acc-pick]");
+  if (!t) {
+    if (accMenuEl && !e.target.closest(".acc-menu")) closeAccMenu();
+    return;
+  }
+  if (t.dataset.accPick) {
+    if (t.closest(".sheet")) closeSheet();
+    return setAccount(t.dataset.accPick);
+  }
+  // Un clic abre (con una pausa corta para distinguirlo del doble clic); teclado (detail 0) abre al instante.
+  clearTimeout(accClickTimer);
+  if (e.detail >= 2) {
+    closeAccMenu();
+    return nextAccount();
+  }
+  if (accMenuEl && accMenuBtn === t) return closeAccMenu();
+  if (e.detail === 0) return openAccMenu(t);
+  accClickTimer = setTimeout(() => openAccMenu(t), 220);
+});
+document.addEventListener(
+  "keydown",
+  (e) => {
+    if (!accMenuEl) {
+      if (e.key === "ArrowDown" && e.target.matches?.("[data-acc-switch]")) {
+        e.preventDefault();
+        openAccMenu(e.target);
+      }
+      return;
+    }
+    const items = [...accMenuEl.querySelectorAll(".acc-item")];
+    const i = items.indexOf(document.activeElement);
+    const to = (n) => {
+      e.preventDefault();
+      items[(n + items.length) % items.length].focus();
+    };
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      closeAccMenu(true);
+    } else if (e.key === "ArrowDown") to(i + 1);
+    else if (e.key === "ArrowUp") to(i < 0 ? items.length - 1 : i - 1);
+    else if (e.key === "Home") to(0);
+    else if (e.key === "End") to(items.length - 1);
+    else if (e.key === "Tab") closeAccMenu();
+  },
+  true
+);
+window.addEventListener("resize", () => closeAccMenu());
 
 // ------------------------------------------------------------------ hoja modal genérica
 let sheetPostId = null;
@@ -2184,7 +2626,7 @@ function openNewPost() {
           <div class="previews" id="previews"></div>
           <div id="size-box">${sizeControls()}</div>
           <div class="field"><label>Cuenta</label>
-            <select class="select" name="accountId">${state.data.accounts.map((a) => `<option value="${a.id}">@${esc(a.username)}${a.demo ? " (prueba)" : ""}</option>`).join("")}</select></div>
+            <select class="select" name="accountId">${state.data.accounts.map((a) => `<option value="${a.id}" ${a.id === state.lastAccountId ? "selected" : ""}>@${esc(a.username)}${a.demo ? " (prueba)" : ""}</option>`).join("")}</select></div>
           <div class="field"><label>Título interno (opcional)</label><input class="input" name="title" placeholder="Ej.: Lanzamiento colección verano"></div>
           <div class="field"><label>Copy</label><textarea class="textarea" name="caption" placeholder="Escribe el texto… o déjalo vacío y el agente te sugerirá uno."></textarea></div>
           <div class="progress hidden" id="up-progress"><i></i></div>
@@ -2399,7 +2841,7 @@ async function submitNewPost(e) {
 
 // ------------------------------------------------------------------ eventos globales
 document.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-profile],[data-research],[data-res-account],[data-res-count],[data-res-remove],[data-go],[data-action],[data-open],[data-filter],[data-cal],[data-chip],[data-proposal-approve],[data-proposal-reject],[data-test-account],[data-remove-account],[data-close]");
+  const t = e.target.closest("[data-profile],[data-research],[data-res-count],[data-res-remove],[data-go],[data-action],[data-open],[data-filter],[data-cal],[data-chip],[data-proposal-approve],[data-proposal-reject],[data-test-account],[data-remove-account],[data-close]");
   if (!t) return;
   if (t.matches("[data-close]")) return closeSheet();
   if (t.closest(".sheet") && !t.matches("[data-open],[data-go]") && !t.closest(".more-menu")) return; // la hoja maneja sus propios botones
@@ -2411,10 +2853,6 @@ document.addEventListener("click", (e) => {
   if (t.dataset.open) return openPost(t.dataset.open);
   if (t.dataset.profile) return openProfile(t.dataset.profile);
   if (t.dataset.research) return openResearch(t.dataset.research);
-  if (t.dataset.resAccount) {
-    research.accountId = t.dataset.resAccount;
-    return rerenderView();
-  }
   if (t.dataset.resCount) {
     research.count = Number(t.dataset.resCount);
     return rerenderView();
@@ -2479,11 +2917,12 @@ document.addEventListener("click", (e) => {
   if (action === "connect") openConnect();
   if (action === "logout") api("/logout", { body: {} }).then(() => location.reload());
   if (action === "demo-account") {
+    const username = (prompt("Usuario de Instagram (sin @). Vacío = cuenta de prueba.") || "").trim().replace(/^@/, "");
     busy(t, async () => {
-      await api("/accounts/demo", { body: {} });
+      await api("/accounts/demo", { body: username ? { username, name: "Cuenta manual" } : {} });
       await refresh();
       rerenderView();
-      toast("Cuenta de prueba lista");
+      toast(username ? `@${username} añadida: publicas tú a mano` : "Cuenta de prueba lista");
     });
   }
   if (action === "test-ai") {

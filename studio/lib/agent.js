@@ -233,6 +233,12 @@ export const PROFILE_FIELDS = {
   pillars: "Temas principales",
   cta: "Llamadas a la acción y captación de leads",
   avoid: "Qué evitar",
+  language: "Idiomas",
+  mix: "Mezcla de contenido",
+  routine: "Rutina y vida real",
+  brands: "Marcas propias y publicidad",
+  visual: "Identidad visual (paleta, fuentes, filtro de fotos, plantillas)",
+  references: "Referencias e inspiración",
   guide: "Guía de contenido",
 };
 

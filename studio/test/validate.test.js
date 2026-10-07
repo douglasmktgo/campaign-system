@@ -61,3 +61,11 @@ test("carrusel de 10 sí, de 11 no", () => {
   assert.ok(!hasErrors(validatePost(post(Array.from({ length: 10 }, () => img(1080, 1350))))));
   assert.ok(hasErrors(validatePost(post(Array.from({ length: 11 }, () => img(1080, 1350))))));
 });
+
+test("publicando a mano: 3:4 (1080×1440 y 1080×1450) y PNG son válidos", () => {
+  const m = { manual: true };
+  assert.ok(!hasErrors(validatePost(post([img(1080, 1440)]), m)));
+  assert.ok(!hasErrors(validatePost(post([img(1080, 1450, { mime: "image/png" })]), m)));
+  assert.ok(!hasErrors(validatePost(post([img(1080, 1440), img(1080, 1440)]), m)));
+  assert.ok(hasErrors(validatePost(post([img(1080, 1920)]), m)));
+});
