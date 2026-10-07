@@ -1,5 +1,8 @@
 # Campaign System — Captura de campañas con IA + ClickUp + Dashboard
 
+> **Nuevo: [Studio](studio/README.md)** — sube, valida y publica artes en Instagram con un agente
+> que solo actúa cuando tú apruebas. Vive en la carpeta `studio/`.
+
 Aplicación web **local** (localhost) para que un diseñador:
 
 1. Pegue o transcriba el brief de una campaña (texto libre).

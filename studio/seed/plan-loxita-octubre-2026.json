@@ -1,0 +1,827 @@
+{
+  "kind": "studio-plan",
+  "version": 1,
+  "username": "loxita.app",
+  "timezone": "America/Sao_Paulo",
+  "summary": {
+    "from": "2026-10-07",
+    "to": "2026-10-31",
+    "at": "2026-10-06T12:00:00.000Z",
+    "text": "Tres fases. 1) Lista de espera y cuenta atrás (7–19/10): casi una pieza al día que enseña el app por dentro resolviendo un dolor (foto de la factura, IA, metas), humor identificable para alcance y carruseles que quitan dudas; todas cierran con «Comenta LISTA» para llenar las 97 vagas de fundador. 2) Día A (20/10, que además es día de «vale»): stories todo el día, reel de cómo entrar y carrusel de primeros pasos. 3) Activación (21–31/10): Desafío Cada Locha Conta de 7 días, temas de temporada (13º, Black Friday, Halloween) y preparación del cambio del 3/11. Reels para alcance + carruseles para guardados; mediodía (12:00–12:30) y 19:00 como franjas base; feriado 12/10 y elecciones 25/10 solo stories."
+  },
+  "profile": {
+    "kind": "App o producto digital",
+    "about": "Loxita (loxita.app): app de finanzas personales en portugués para anotar gastos en segundos, leer facturas con una foto, preguntarle a una IA por tus gastos y crear metas. Sin conectar el banco. La creó Douglas, diseñador venezolano en Brasil, sin saber programar. Abre el 20/10/2026 para la lista; el plan gratis tiene límites desde el 3/11.",
+    "audience": "Brasileños de 22–40 años con sueldo que no llega a fin de mes y sin paciencia para planillas (personas Mariela, Lucas y Camila). También hispanohablantes que viven en Brasil.",
+    "goals": "Hasta el 20/10: registros en la lista de espera (97 de 100 vagas de fundador libres: R$ 12,90/mes mientras siga suscrito; precio normal R$ 19,90). Del 20/10 al 3/11: activación (primer gasto, foto de factura, meta). Desde el 3/11: suscripciones.",
+    "tone": "Cercano, con humor y honesto: Cara Común 60 %, Bufón 30 %, Sabio 10 %. Primera persona del fundador, construir en público. Portugués de Brasil natural; en vídeo, con acento venezolano. Visual pixel: Jersey 10, Lochitos y la moneda 12½.",
+    "pillars": "Demos del app resolviendo un dolor; humor identificable sobre dinero; educación financiera práctica y guardable; historia del fundador (serie de episodios, meta de la bici del Ironman 2028); comunidad y desafíos.",
+    "cta": "Antes del 20/10: «Comenta LISTA que te mando el link por DM» o link en la bio (loxita.app). Después: activar la cuenta, unirse al desafío, guardar el post.",
+    "avoid": "Política (y el 25/10, día de elecciones), prometer rentabilidades o dar asesoría de inversión, inventar números o testimonios, tono de IA.",
+    "guide": "Idioma de publicación: portugués de Brasil. Idioma de trabajo con el dueño: español. Eslogan: «Cada locha conta». Hashtags base: #cadalochaconta #financaspessoais #controlefinanceiro #organizacaofinanceira."
+  },
+  "slots": [
+    {
+      "status": "published",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-02",
+      "time": "19:00",
+      "format": "REEL",
+      "phase": "Intriga",
+      "theme": "Ep.1 «Criei um app sem saber programar»",
+      "goal": "seguidores",
+      "hook": "Criei um app sem saber programar.",
+      "notes": "Fecha aproximada: corrígela si no fue el 2/10. Añade los números cuando puedas."
+    },
+    {
+      "status": "published",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-04",
+      "time": "19:00",
+      "format": "CARRUSEL",
+      "phase": "Revelación",
+      "theme": "Carrusel «Chegou a Loxita / O que é uma locha? / Cada locha conta»",
+      "goal": "seguidores",
+      "hook": "Chegou a Loxita.",
+      "notes": "Fecha aproximada. La marca ya está revelada: el viejo Ep.2 «Por que Loxita» queda obsoleto."
+    },
+    {
+      "status": "published",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-05",
+      "time": "19:00",
+      "format": "REEL",
+      "phase": "Revelación",
+      "theme": "Reel celular 3D: o app por dentro",
+      "goal": "leads",
+      "hook": "O app por dentro.",
+      "notes": "Fecha aproximada. Archivo: LOXITA IDENTIDAD VISUAL/LANZAMIENTO 2026/POST OCTUBRE/VIDEOS/loxita-app-3d-publicado.mp4"
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-07",
+      "time": "19:00",
+      "format": "CARRUSEL",
+      "phase": "Lista de espera",
+      "goal": "leads",
+      "theme": "Cómo entrar: quedan 97 vagas de fundador",
+      "hook": "Sobraram 97 vagas. Depois disso, o preço muda.",
+      "outline": [
+        "Sobraram 97 vagas de fundador da Loxita (contador pixel 97/100)",
+        "Loxita é o app que mostra pra onde vai cada real do seu mês — sem planilha e sem conectar banco.",
+        "Fundador paga R$ 12,90/mês enquanto for assinante. O preço normal vai ser R$ 19,90.",
+        "De 20/10 até 3/11: tudo liberado, grátis — IA, foto da conta, metas, projetos.",
+        "De 20/10 a 3/11 só entra quem está na lista.",
+        "Como entrar: link na bio → seu e-mail → pronto. 30 segundos.",
+        "Comenta LISTA que eu te mando o link no direct."
+      ],
+      "caption": "Quando eu abri a lista de espera, achei que as 100 vagas iam acabar no primeiro dia. Não acabaram — sobraram 97. 😅\n\nEntão vou ser direto: quem entrar na lista agora vira fundador da Loxita.\n→ R$ 12,90/mês enquanto for assinante (o preço normal vai ser R$ 19,90)\n→ tudo liberado, grátis, de 20/10 até 3/11\n→ e de 20/10 a 3/11 só entra quem está na lista\n\nÉ só o e-mail. Leva 30 segundos.\nComenta LISTA que eu te mando o link no direct (ou link na bio).",
+      "cta": "Comenta LISTA que eu te mando o link no direct (ou link na bio).",
+      "production": "Carrusel 1080×1350 con el kit de marca (Jersey 10 para el contador, Lochitos). Lo maqueto yo; tú revisas. Actualiza el número con waitlist_count() el mismo día.",
+      "why": "Casi nadie sabe que hay lista ni qué gana: es la pieza de conversión base. Fíjala arriba del perfil."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-08",
+      "time": "12:30",
+      "format": "REEL",
+      "phase": "Lista de espera",
+      "goal": "leads",
+      "theme": "Demo: foto de la factura de luz → el app la anota sola",
+      "hook": "Tirei uma foto da conta de luz e o app anotou tudo sozinho.",
+      "outline": [
+        "0–2 s: mão segurando a conta de luz + texto do gancho",
+        "2–7 s: abre a Loxita → Anota rápido → 📷 → foto",
+        "7–12 s: a tela se preenche sozinha (nome, valor, vencimento)",
+        "12–16 s: salva como gasto fixo e aparece no mês",
+        "16–20 s: «Abre 20/10 · lista na bio»"
+      ],
+      "caption": "Eu odeio digitar conta. Então coloquei isso na Loxita: você tira uma foto (ou manda o print/PDF) e ela lê nome, valor e vencimento. Você só confere e salva.\n\nA foto não fica guardada — ela lê e descarta.\n\nAbre dia 20/10. Quem está na lista entra primeiro e paga preço de fundador.\nComenta LISTA que eu te mando o link no direct (ou link na bio).",
+      "cta": "Comenta LISTA que eu te mando o link no direct (ou link na bio).",
+      "production": "Grabación de pantalla real del app + toma de la mano con la factura. Montaje en Remotion con el kit Loxita (lo hago yo si me pasas la grabación).",
+      "why": "Demo de «magia» en 3 segundos: el formato con más potencial de compartir. 12:30 = pico de la pausa del almuerzo en 2026."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-09",
+      "time": "12:00",
+      "format": "REEL",
+      "phase": "Lista de espera",
+      "goal": "seguidores",
+      "theme": "Humor POV: día 9 y el sueldo ya se fue",
+      "hook": "POV: é dia 9 e você está procurando onde foi parar o salário.",
+      "outline": [
+        "0–2 s: você olhando o app do banco, cara de choque",
+        "2–6 s: flashes — «iFood», «só um cafezinho», «aquela assinatura que nem uso»",
+        "6–10 s: abre a Loxita: o mês por categoria",
+        "10–13 s: «achei» + Lochito monstrito",
+        "13–15 s: «Cada locha conta · lista na bio»"
+      ],
+      "caption": "Ninguém gasta o salário de uma vez. Ele vai em lochas: um delivery aqui, um cafezinho ali, aquela assinatura que você esqueceu.\n\nFoi por isso que eu fiz a Loxita: pra ver pra onde foi cada real sem precisar de planilha.\n\nMarca aquele amigo que no dia 9 já está no «depois eu vejo» 👀",
+      "cta": "Marca um amigo",
+      "production": "Tú a cámara (3 tomas, 15 s) + 2 s de pantalla del app. Audio en tendencia de Instagram.",
+      "why": "Humor identificable (arquetipo Bufón) = compartidos y alcance a gente nueva. El viernes rinde más al mediodía que por la noche."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-10",
+      "time": "10:30",
+      "format": "CARRUSEL",
+      "phase": "Lista de espera",
+      "goal": "autoridad",
+      "theme": "5 gastos invisibles que se comen el sueldo",
+      "hook": "5 gastos que comem seu salário sem você perceber (o nº 4 é o pior)",
+      "outline": [
+        "5 gastos invisíveis que comem seu salário (o nº 4 é o pior)",
+        "1. Assinaturas esquecidas — streaming, app, nuvem. Soma tudo.",
+        "2. Taxa de entrega — R$ 8 por pedido × 10 pedidos = R$ 80 no mês.",
+        "3. Tarifas do banco e do cartão que você nunca leu.",
+        "4. Juros do rotativo do cartão — uma das dívidas mais caras que existem.",
+        "5. «Só um cafezinho» — R$ 7 por dia útil = uns R$ 150 no mês.",
+        "Nenhum é grande. Juntos, são o seu mês. Cada locha conta.",
+        "Salva pra revisar no fim do mês · Loxita abre 20/10, lista na bio"
+      ],
+      "caption": "Quase nunca é um gasto grande que estoura o mês. São os pequenos que a gente não vê.\n\nSalva esse post e faz o teste no fim do mês: soma só esses 5. O número costuma assustar.\n\nE se quiser ver isso sem planilha, a Loxita abre dia 20/10 — link na bio pra entrar na lista de fundadores.",
+      "cta": "Salva e faz o teste",
+      "production": "Carrusel de 8 láminas 1080×1350, un Lochito por gasto (recibo, moneda, monstrito). Lo maqueto yo.",
+      "why": "Utilidad guardable: los carruseles de dicas dan guardados y confianza. El sábado por la mañana hay menos competencia."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-11",
+      "time": "19:00",
+      "format": "REEL",
+      "phase": "Lista de espera",
+      "goal": "comunidad",
+      "theme": "Ep.2 (nuevo): mi meta de R$ 9 mil para la bici del Ironman",
+      "hook": "Eu tô juntando R$ 9.000 pra uma bike. E criei um app pra isso.",
+      "outline": [
+        "0–3 s: você com o capacete / foto da bike de triatlo",
+        "3–15 s: a história — Ironman 2028, a bike custa uns R$ 9 mil, sempre começava a guardar e parava",
+        "15–25 s: tela de Metas na Loxita: a moeda enchendo, quanto falta, quanto por mês",
+        "25–32 s: «cada locha conta: até a bike»",
+        "32–35 s: «Qual é a sua meta? Comenta» + lista na bio"
+      ],
+      "caption": "Em 2028 eu quero completar um Ironman. Antes disso, preciso de uma bike que custa uns R$ 9 mil. 🚴\n\nToda vez que eu tentava guardar, o dinheiro sumia no meio do mês. Então coloquei uma meta na Loxita e agora vejo quanto falta e quanto preciso separar.\n\nQual é a sua meta agora? Me conta nos comentários que eu respondo todo mundo.\n\nLoxita abre 20/10 · link na bio pra entrar na lista de fundadores.",
+      "cta": "Comenta sua meta",
+      "production": "Tú a cámara (episodio 2 de la serie, mismo estilo que el Ep.1) + pantalla de Metas grabada del app.",
+      "why": "Sustituye al viejo Ep.2: continúa la historia personal con una meta concreta. Historia + pregunta = comentarios; domingo noche = planificar."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [],
+      "date": "2026-10-12",
+      "time": "11:00",
+      "format": "STORIES",
+      "phase": "Lista de espera",
+      "goal": "comunidad",
+      "theme": "Feriado: encuesta y caja de preguntas (sin feed)",
+      "hook": "Feriado: é dia de gastar ou de economizar? 👀",
+      "outline": [
+        "Story 1: enquete «Feriado é dia de gastar ou de economizar?»",
+        "Story 2: caixinha «Qual gasto te pega todo mês?»",
+        "Story 3: contador de vagas + figurinha de link «Entrar na lista»",
+        "Story 4: bastidor — preparando o lançamento"
+      ],
+      "caption": "",
+      "cta": "Figurinha de link: Entrar na lista",
+      "production": "Stories con plantillas de marca, 10 minutos. Las respuestas de la caja alimentan ideas de contenido.",
+      "why": "Feriado nacional (N. Sra. Aparecida + Día de los Niños): poca atención para el feed; las stories mantienen el contacto."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-13",
+      "time": "19:00",
+      "format": "REEL",
+      "phase": "Cuenta atrás",
+      "goal": "leads",
+      "theme": "Demo IA: «¿puedo pedir iFood hoy?»",
+      "hook": "Perguntei pra IA se eu podia pedir iFood hoje. Ela foi sincera demais.",
+      "outline": [
+        "0–2 s: você no sofá com fome + texto do gancho",
+        "2–8 s: digita na IA da Loxita «posso pedir iFood hoje?»",
+        "8–15 s: a resposta real, com base nos seus gastos",
+        "15–19 s: sua reação 😐 + «ok… ovo frito»",
+        "19–22 s: «Abre 20/10 · lista na bio»"
+      ],
+      "caption": "A Loxita tem uma IA que conhece os seus gastos. Então eu fiz a pergunta mais perigosa do mês. 😂\n\nEla não te julga — mas também não passa pano.\n\nAbre dia 20/10 e, até 3/11, tudo está liberado pra quem entrar pela lista.\nComenta LISTA que eu te mando o link no direct (ou link na bio).",
+      "cta": "Comenta LISTA que eu te mando o link no direct (ou link na bio).",
+      "production": "Grabación real del chat de IA (usa una respuesta real, no inventada) + tu reacción a cámara. Montaje en Remotion.",
+      "why": "Enseña el diferencial (IA) con una pregunta que todos se hacen. El martes a las 19:00 es una franja fuerte."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-14",
+      "time": "19:00",
+      "format": "REEL",
+      "phase": "Cuenta atrás",
+      "goal": "leads",
+      "theme": "Prueba social: los testers cuentan qué les gustó",
+      "hook": "Dei o app pra algumas pessoas usarem antes de todo mundo. Olha o que elas disseram.",
+      "outline": [
+        "0–2 s: gancho",
+        "2–20 s: 4–5 clipes selfie de colegas/testers: «o que você mais gostou?»",
+        "20–25 s: telas do app",
+        "25–28 s: «Sobram X vagas de fundador · link na bio»"
+      ],
+      "caption": "Antes de abrir, um grupo pequeno já está usando a Loxita — amigos e colegas que me ajudaram a testar.\n\nPedi pra eles falarem a verdade, sem roteiro. Esse é o resultado.\n\nDia 20/10 abre pra lista. Quem entrar agora paga R$ 12,90 como fundador (enquanto for assinante).\nLink na bio.",
+      "cta": "Link na bio",
+      "production": "Pide HOY a los colegas/testers un vídeo selfie de 5–8 s: «¿qué es lo que más te gustó?». Lo monto yo. Solo testimonios reales.",
+      "notes": "Si no llegan clips a tiempo: capturas de mensajes reales (con permiso) en carrusel.",
+      "why": "Prueba social real a mitad de la cuenta atrás: baja la desconfianza de «app nuevo». El miércoles suele ser el mejor día."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-15",
+      "time": "12:30",
+      "format": "CARRUSEL",
+      "phase": "Cuenta atrás",
+      "goal": "leads",
+      "theme": "FAQ: 6 dudas antes de entrar en la lista",
+      "hook": "Antes de entrar na lista, você provavelmente quer saber isso:",
+      "outline": [
+        "6 perguntas antes de entrar na lista da Loxita",
+        "Preciso conectar minha conta do banco? Não. Você anota (ou tira foto) e pronto.",
+        "É seguro? Seus dados são seus — e você pode apagar sua conta quando quiser, dentro do app.",
+        "Quanto custa? Grátis até 3/11. Depois: R$ 12,90/mês pra fundador (normal R$ 19,90). E tem plano grátis.",
+        "Funciona no iPhone e no Android? Sim, pelo navegador — e dá pra instalar na tela inicial.",
+        "Posso cancelar? Quando quiser.",
+        "Quando abre? 20/10, primeiro pra quem está na lista.",
+        "Ficou alguma dúvida? Comenta que eu respondo · link na bio"
+      ],
+      "caption": "Juntei aqui as perguntas que mais me fizeram desde que anunciei a Loxita.\n\nResumo: não precisa conectar banco, é grátis até 3/11 e, se você entrar pela lista, o preço de fundador fica R$ 12,90 enquanto você for assinante.\n\nTem outra dúvida? Deixa nos comentários que eu respondo uma por uma.",
+      "cta": "Comenta sua dúvida",
+      "production": "Carrusel de 8 láminas, estilo «chat» con Lochitos. Lo maqueto yo.",
+      "notes": "Revisar las respuestas con las páginas legales (privacidad, cancelación) antes de publicar.",
+      "why": "Quita las objeciones (banco, precio, seguridad) antes del 20/10. Jueves al mediodía = guardados."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-16",
+      "time": "12:00",
+      "format": "REEL",
+      "phase": "Cuenta atrás",
+      "goal": "leads",
+      "theme": "Precio ancla: R$ 12,90 = menos que dos cafés",
+      "hook": "R$ 12,90 por mês. Menos que dois cafés.",
+      "outline": [
+        "0–2 s: dois cafés na mesa + o preço",
+        "2–8 s: «um app que te mostra onde foram os outros cafés do mês»",
+        "8–14 s: telas rápidas — anotar, foto da conta, IA, metas",
+        "14–18 s: «Preço de fundador só pras 100 primeiras pessoas da lista» + contador",
+        "18–20 s: «faltam 4 dias»"
+      ],
+      "caption": "Fiz a conta: o preço de fundador da Loxita é menos que dois cafés por mês. ☕☕\n\nE é justamente o app que te mostra quantos cafés você tomou esse mês. 😅\n\nO preço de fundador (R$ 12,90 enquanto for assinante) é só pras 100 primeiras pessoas da lista. Faltam 4 dias pra abrir.\nComenta LISTA que eu te mando o link no direct (ou link na bio).",
+      "cta": "Comenta LISTA que eu te mando o link no direct (ou link na bio).",
+      "production": "Toma de producto (2 cafés) + pantallas del app. Lo monto yo en Remotion.",
+      "why": "Ancla el precio con algo cotidiano y suma urgencia (faltan 4 días). Viernes al mediodía."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-17",
+      "time": "10:30",
+      "format": "REEL",
+      "phase": "Cuenta atrás",
+      "goal": "comunidad",
+      "theme": "Bastidores: últimos ajustes antes de abrir",
+      "hook": "Faltam 3 dias pra abrir o app que eu criei sem saber programar.",
+      "outline": [
+        "0–3 s: você no computador, sábado de manhã",
+        "3–15 s: o que está fazendo — corrigindo detalhes, o ícone novo da moedinha pixel, testando no celular",
+        "15–22 s: o que deu errado essa semana (honesto)",
+        "22–25 s: «terça abre · lista na bio»"
+      ],
+      "caption": "Sábado de manhã e eu aqui ajustando os últimos detalhes. Trocamos até o ícone (agora é a moedinha pixel 🪙).\n\nConstruir em público dá medo, mas vocês estão acompanhando cada passo desde o episódio 1.\n\nTerça, 20/10, abre. Quem está na lista entra primeiro.",
+      "cta": "Link na bio",
+      "production": "Tú, móvil en trípode, 3–4 tomas. Continuidad con el Ep.1.",
+      "why": "Los bastidores mantienen la historia de «construir en público» que abrió la cuenta. Sábado temprano = contenido ligero."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-18",
+      "time": "19:00",
+      "format": "CARRUSEL",
+      "phase": "Cuenta atrás",
+      "goal": "leads",
+      "theme": "Anuncio del Desafío 7 días Cada Locha Conta (empieza 21/10)",
+      "hook": "Topa um desafio de 7 dias com o seu dinheiro?",
+      "outline": [
+        "Desafio Cada Locha Conta: 7 dias, começa 21/10",
+        "Dia 1 — anote tudo o que gastar (até a bala)",
+        "Dia 2 — tire foto de uma conta fixa",
+        "Dia 3 — encontre uma assinatura que você não usa",
+        "Dia 4 — pergunte pra IA onde dá pra economizar",
+        "Dia 5 — crie uma meta",
+        "Dia 6 — um dia sem delivery",
+        "Dia 7 — compare: quanto você economizou?",
+        "Pra participar: entra na lista (link na bio) e comenta EU TOPO"
+      ],
+      "caption": "Dia 21/10 começa o Desafio Cada Locha Conta: 7 dias, uma tarefa pequena por dia, tudo dentro da Loxita.\n\nNo final eu vou mostrar o meu resultado — e o de quem quiser compartilhar.\n\nPra participar: entra na lista pelo link da bio (o app abre 20/10) e comenta EU TOPO que eu te aviso no dia.",
+      "cta": "Comenta EU TOPO",
+      "production": "Carrusel de 9 láminas, un Lochito por día. Lo maqueto yo.",
+      "why": "Puente entre la lista y la activación: da un motivo para registrarse ya y usar el app la primera semana. Domingo noche = planificar la semana."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-19",
+      "time": "19:00",
+      "format": "REEL",
+      "phase": "Cuenta atrás",
+      "goal": "leads",
+      "theme": "Víspera: mañana abre (último aviso del precio de fundador)",
+      "hook": "Amanhã abre. E essa é a última vez que eu falo do preço de fundador.",
+      "outline": [
+        "0–2 s: você a câmera",
+        "2–12 s: o que acontece amanhã — abre pra lista, tudo grátis até 3/11, fundador R$ 12,90",
+        "12–18 s: quantas vagas restam (número real)",
+        "18–22 s: «se você queria entrar, é hoje · link na bio»"
+      ],
+      "caption": "Amanhã, 20/10, a Loxita abre. 🪙\n\nQuem está na lista recebe o acesso primeiro, usa tudo grátis até 3/11 e garante R$ 12,90/mês como fundador enquanto for assinante.\n\nAinda dá tempo: link na bio. Leva 30 segundos.",
+      "cta": "Link na bio",
+      "production": "Tú a cámara, 1 toma. Actualiza el número de vagas antes de grabar.",
+      "why": "Último empujón de urgencia la víspera. Lunes 19:00."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [],
+      "date": "2026-10-20",
+      "time": "09:00",
+      "format": "STORIES",
+      "phase": "Día A",
+      "goal": "activacion",
+      "theme": "Día A en stories durante todo el día",
+      "hook": "ABRIU 🪙",
+      "outline": [
+        "09:00 «Abriu!» + link",
+        "12:00 reações e bastidor",
+        "15:00 tutorial em 3 telas: e-mail → criar conta → primeiro gasto",
+        "19:00 contador de fundadores",
+        "21:00 obrigado + reposts"
+      ],
+      "caption": "",
+      "cta": "Figurinha de link: Abrir a Loxita",
+      "production": "Stories en directo durante el día; repostea a quien te mencione.",
+      "why": "El Día A necesita presencia constante para acompañar a quien entra durante el día."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-20",
+      "time": "12:00",
+      "format": "REEL",
+      "phase": "Día A",
+      "goal": "activacion",
+      "theme": "¡Abrió! Cómo entrar en 30 segundos",
+      "hook": "Abriu! Em 30 segundos você já está dentro.",
+      "outline": [
+        "0–2 s: «Abriu» com a moeda girando",
+        "2–20 s: gravação de tela — e-mail da lista → criar conta → primeiro gasto anotado",
+        "20–26 s: «fundador: R$ 12,90 garantido»",
+        "26–30 s: «link na bio»"
+      ],
+      "caption": "É hoje! A Loxita abriu. 🪙\n\nSe você está na lista, olha seu e-mail: o acesso já está lá. Cria a conta e anota seu primeiro gasto — leva 30 segundos.\n\nE se caiu o vale hoje, já começa anotando ele. 😉\n\nAté 3/11 tudo está liberado. Qualquer problema, me chama no direct.",
+      "cta": "Link na bio",
+      "production": "Grabación de pantalla del flujo real + moneda girando (locha-gira). Lo dejo listo el 19/10.",
+      "why": "El 20 es día de adelanto/«vale» en muchas empresas: gancho natural para anotar el primer ingreso. Mediodía = pico de 2026."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-20",
+      "time": "19:00",
+      "format": "CARRUSEL",
+      "phase": "Día A",
+      "goal": "activacion",
+      "theme": "Bienvenido, fundador: los 3 primeros pasos",
+      "hook": "Entrou na Loxita? Faz isso nos primeiros 5 minutos.",
+      "outline": [
+        "Primeiros 5 minutos na Loxita",
+        "1. Coloca sua renda do mês",
+        "2. Anota 3 gastos de hoje (ou tira foto de uma conta)",
+        "3. Cria uma meta, mesmo pequena",
+        "Bônus: pergunta pra IA «como está meu mês?»",
+        "Amanhã começa o Desafio 7 dias · salva esse post"
+      ],
+      "caption": "Pra quem entrou hoje: esses são os 3 passos que fazem a Loxita começar a trabalhar pra você.\n\nSalva esse post — amanhã começa o Desafio Cada Locha Conta. 💜\n\nBem-vindo, fundador.",
+      "cta": "Salva o post",
+      "production": "Carrusel de 6 láminas con capturas reales del app.",
+      "why": "Activación inmediata: quien se registra hoy necesita saber qué hacer primero."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-21",
+      "time": "19:00",
+      "format": "REEL",
+      "phase": "Activación",
+      "goal": "activacion",
+      "theme": "Desafío día 1: anoté hasta el caramelo",
+      "hook": "Dia 1 do desafio: anotei até a bala que eu comprei.",
+      "outline": [
+        "0–2 s: gancho",
+        "2–15 s: seu dia anotando cada gasto rapidinho (Anota rápido)",
+        "15–20 s: o total do dia",
+        "20–24 s: «e você? posta nos stories e me marca»"
+      ],
+      "caption": "Começou o Desafio Cada Locha Conta! Dia 1: anotar TUDO.\n\nO meu total foi esse aí. E o seu? Posta nos stories com #cadalochaconta e me marca que eu reposto. 🪙",
+      "cta": "Posta nos stories e me marca",
+      "production": "Tú: clips cortos durante el día + pantalla.",
+      "why": "Abre el desafío con el ejemplo del fundador y genera contenido de usuarios para stories."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-22",
+      "time": "12:30",
+      "format": "CARRUSEL",
+      "phase": "Activación",
+      "goal": "activacion",
+      "theme": "Tutorial: anotar una factura solo con una foto (desafío día 2)",
+      "hook": "Para de digitar conta. Faz assim:",
+      "outline": [
+        "Como anotar uma conta só com uma foto",
+        "Abre a Loxita → Anota rápido → 📷",
+        "Tira foto da conta (ou manda print/PDF)",
+        "Confere nome, valor e vencimento",
+        "Escolhe fixo ou variável → salvar",
+        "Pronto. A foto não fica guardada. Desafio dia 2 ✅"
+      ],
+      "caption": "Desafio dia 2: tirar foto de uma conta fixa.\n\nPasso a passo aqui. Salva pra quando chegar a próxima conta de luz. 💡",
+      "cta": "Salva o post",
+      "production": "Carrusel con capturas reales del app.",
+      "why": "Tutorial guardable de la función diferencial, alineado con el día 2 del desafío."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-23",
+      "time": "12:00",
+      "format": "REEL",
+      "phase": "Activación",
+      "goal": "comunidad",
+      "theme": "Las primeras 72 h en números (sin filtro)",
+      "hook": "3 dias de Loxita aberta. Os números, sem filtro.",
+      "outline": [
+        "0–2 s: gancho",
+        "2–18 s: números reais — fundadores, gastos anotados, categoria mais anotada, pergunta mais feita pra IA",
+        "18–24 s: o que deu errado e eu consertei",
+        "24–28 s: obrigado + CTA"
+      ],
+      "caption": "Prometi construir em público, então aqui estão os números reais dos primeiros 3 dias. 📊\n\nObrigado a cada fundador que entrou.\n\n[CTA: completar según la regla de entrada después del 20/10]",
+      "cta": "Por definir",
+      "production": "Tú a cámara + gráficos pixel con datos reales de Supabase (los saco yo).",
+      "notes": "Solo datos reales. PENDIENTE: ¿qué CTA usamos después del 20/10 para quien no está en la lista? (¿la lista sigue abierta? ¿segunda ola?)",
+      "why": "La transparencia genera confianza y comunidad. Viernes al mediodía."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-24",
+      "time": "10:30",
+      "format": "REEL",
+      "phase": "Activación",
+      "goal": "seguidores",
+      "theme": "Humor: los 4 tipos de persona anotando gastos",
+      "hook": "Os 4 tipos de pessoa anotando gastos. Qual é você?",
+      "outline": [
+        "1. O detalhista: anota até 50 centavos",
+        "2. O otimista: «esse não conta»",
+        "3. O que esquece: anota tudo no domingo",
+        "4. O que tem medo de olhar: fecha o app",
+        "Final: «marca quem é o nº 4»"
+      ],
+      "caption": "Eu sou o nº 1, sem vergonha nenhuma. 😂\n\nE você? Marca aqui quem é o tipo 4.",
+      "cta": "Marca um amigo",
+      "production": "Tú interpretando los 4 (cambio de gorra o ropa), 4 tomas.",
+      "why": "El formato «tipos de» es muy compartible en finanzas: trae seguidores nuevos el fin de semana."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [],
+      "date": "2026-10-25",
+      "time": "19:00",
+      "format": "STORIES",
+      "phase": "Activación",
+      "goal": "comunidad",
+      "theme": "Domingo de elecciones: solo stories del desafío (sin feed)",
+      "hook": "Como está indo o seu desafio?",
+      "outline": [
+        "Enquete: «Quantos dias do desafio você completou?»",
+        "Reposts de quem está participando",
+        "Nada de política"
+      ],
+      "caption": "",
+      "cta": "Responde a enquete",
+      "production": "Stories rápidas.",
+      "why": "Segunda vuelta de las elecciones: la atención está en otro lado. No publicar feed ni tocar política."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-26",
+      "time": "19:00",
+      "format": "CARRUSEL",
+      "phase": "Activación",
+      "goal": "autoridad",
+      "theme": "Qué hacer con el 13º (antes de que llegue)",
+      "hook": "O 13º cai em novembro. Decide agora o que fazer com ele.",
+      "outline": [
+        "Seu 13º já tem dono? Decide antes de ele cair",
+        "1ª parcela até 30/11, 2ª até 20/12",
+        "1. Dívidas caras primeiro (cartão, cheque especial)",
+        "2. Reserva de emergência",
+        "3. Contas de começo de ano (IPVA, IPTU, material escolar)",
+        "4. Uma meta sua — com valor e data",
+        "5. E sim: um pouco pra curtir",
+        "Cria a meta do 13º na Loxita hoje · salva o post"
+      ],
+      "caption": "Todo ano o 13º some antes do Natal. Esse ano dá pra decidir antes.\n\nSalva esse post e cria uma meta na Loxita com o valor do seu 13º — eu vou fazer a minha (a bike agradece 🚴).",
+      "cta": "Salva o post",
+      "production": "Carrusel de 8 láminas. Lo maqueto yo.",
+      "why": "Tema de temporada con mucha búsqueda en Brasil a finales de octubre; guardable y conecta con Metas."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-27",
+      "time": "19:00",
+      "format": "REEL",
+      "phase": "Activación",
+      "goal": "comunidad",
+      "theme": "Resultado del desafío: lo que descubrí en 7 días",
+      "hook": "7 dias anotando tudo. Isso é o que eu descobri.",
+      "outline": [
+        "0–2 s: gancho",
+        "2–20 s: 3 descobertas com os seus números reais",
+        "20–26 s: resultados da comunidade (reposts)",
+        "26–30 s: «próximo desafio?»"
+      ],
+      "caption": "Terminou o Desafio Cada Locha Conta. O meu resultado: [completar com o real].\n\nConta aqui o seu nos comentários. 👇",
+      "cta": "Conta seu resultado",
+      "production": "Tú a cámara + pantallas con tus números reales.",
+      "notes": "Completar con números reales. ¿Hay premio para el mejor comentario (p. ej. meses Premium)? Decidir.",
+      "why": "Cierra el desafío con resultados reales: prueba de valor para quien todavía no entró."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-28",
+      "time": "12:30",
+      "format": "REEL",
+      "phase": "Activación",
+      "goal": "activacion",
+      "theme": "Black Friday: crea la meta antes del descuento",
+      "hook": "A Black Friday é dia 27/11. Seu dinheiro já sabe disso?",
+      "outline": [
+        "0–2 s: gancho com etiqueta de desconto",
+        "2–10 s: «desconto não é economia se você não planejou»",
+        "10–20 s: cria na Loxita uma meta «Black Friday» com valor e data",
+        "20–25 s: «em 4 semanas você chega com o dinheiro separado»"
+      ],
+      "caption": "Faltam 4 semanas pra Black Friday. Dá tempo de chegar com o dinheiro separado em vez de no cartão.\n\nCria uma meta «Black Friday» na Loxita com o valor que você quer gastar e acompanha quanto falta.",
+      "cta": "Cria sua meta",
+      "production": "Pantalla de Metas + texto animado. Lo monto yo.",
+      "why": "Anticipa la Black Friday (27/11), tema de mucho interés. Miércoles al mediodía."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-29",
+      "time": "19:00",
+      "format": "CARRUSEL",
+      "phase": "Activación",
+      "goal": "leads",
+      "theme": "Los primeros fundadores cuentan qué les parece",
+      "hook": "O que os primeiros fundadores estão achando da Loxita",
+      "outline": [
+        "Título",
+        "2–6: prints/depoimentos reais (com permissão)",
+        "«O que você quer que a Loxita faça a seguir? Comenta»"
+      ],
+      "caption": "Uma semana e pouco de Loxita aberta. Pedi pros fundadores contarem o que estão achando — esses foram alguns.\n\nE você, o que quer que a Loxita faça a seguir?",
+      "cta": "Comenta sua ideia",
+      "production": "Carrusel con capturas de mensajes reales (pide permiso).",
+      "notes": "Solo testimonios reales con permiso.",
+      "why": "Prueba social de usuarios reales tras el lanzamiento. Jueves noche."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-30",
+      "time": "12:00",
+      "format": "REEL",
+      "phase": "Activación",
+      "goal": "ventas",
+      "theme": "Qué cambia el 3/11 (gratis vs Premium, precio de fundador)",
+      "hook": "Terça que vem a Loxita muda. Te explico em 20 segundos.",
+      "outline": [
+        "0–2 s: gancho",
+        "2–12 s: até 3/11 tudo liberado; depois, plano grátis com limites (3 perguntas pra IA, 1 projeto, 3 meses de histórico) ou Premium",
+        "12–18 s: fundador: R$ 12,90 garantido enquanto for assinante",
+        "18–20 s: «ativa no app»"
+      ],
+      "caption": "Transparência total: a partir de 3/11 a Loxita passa a ter plano grátis e Premium.\n\nNo grátis: 3 perguntas pra IA, 1 projeto e 3 meses de histórico.\nFundador continua pagando R$ 12,90 enquanto for assinante.\n\nDúvidas? Comenta que eu respondo.",
+      "cta": "Comenta sua dúvida",
+      "production": "Tú a cámara + tabla gratis/Premium en pixel.",
+      "why": "Prepara el cambio del 3/11 sin sorpresas y empuja la suscripción de fundador."
+    },
+    {
+      "status": "proposed",
+      "source": "seed",
+      "hashtags": [
+        "#cadalochaconta",
+        "#financaspessoais",
+        "#controlefinanceiro",
+        "#organizacaofinanceira"
+      ],
+      "date": "2026-10-31",
+      "time": "10:30",
+      "format": "REEL",
+      "phase": "Activación",
+      "goal": "seguidores",
+      "theme": "Halloween: los monstruitos que asustan tu sueldo",
+      "hook": "Os monstros que assombram seu salário todo mês 👻",
+      "outline": [
+        "0–2 s: o Lochito monstrito pixel aparece",
+        "2–18 s: 4 monstrinhos — Assinatura Fantasma, Taxa Zumbi, Juros Vampiro, Delivery Lobisomem",
+        "18–24 s: «a Loxita acende a luz»",
+        "24–26 s: «qual te assombra mais?»"
+      ],
+      "caption": "Feliz Halloween (e Dia do Saci 🇧🇷)! Esses são os monstros que assombram o salário de todo mundo.\n\nQual deles mora na sua casa? 👻",
+      "cta": "Comenta qual te assombra",
+      "production": "Animación pixel con los Lochitos en Remotion: la hago yo.",
+      "why": "Fecha temática + personajes de marca = pieza 100 % Loxita y compartible. Sábado por la mañana."
+    }
+  ]
+}
